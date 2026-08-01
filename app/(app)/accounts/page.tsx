@@ -6,7 +6,7 @@ import { Plus, ChevronDown, Edit2, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Account { id: string; name: string; type: string; balance: number; color: string }
-interface CreditCard { id: string; name: string; bank: string; totalLimit: number; usedLimit: number; dueAmount: number; minimumDue: number; dueDate: number; statementDate: number; color: string }
+interface CreditCard { id: string; name: string; bank: string; totalLimit: number; usedLimit: number; dueAmount: number; minimumDue: number; dueDate: number; statementDate: number; color: string; type: 'CARD' | 'PAYLATER' }
 
 const COLORS = ['#01696f', '#006494', '#5f259f', '#dc2626', '#d97706', '#16a34a']
 const CARD_COLORS = ['#1a1a2e', '#003087', '#8b0000', '#1b4332', '#1e3a5f', '#2d1b69']
@@ -58,6 +58,7 @@ function CreditCardForm({ onSuccess, initial }: { onSuccess: () => void; initial
     dueAmount: String(initial?.dueAmount ?? ''), minimumDue: String(initial?.minimumDue ?? ''),
     dueDate: String(initial?.dueDate ?? ''),
     statementDate: String(initial?.statementDate ?? ''), color: initial?.color ?? CARD_COLORS[0],
+    type: initial?.type ?? 'CARD' as 'CARD' | 'PAYLATER',
   })
   const [loading, setLoading] = useState(false)
   const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(p => ({ ...p, [k]: e.target.value }))
@@ -76,8 +77,12 @@ function CreditCardForm({ onSuccess, initial }: { onSuccess: () => void; initial
 
   return (
     <form onSubmit={submit} className="space-y-4 pb-4">
-      <Input label="Card Name" value={form.name} onChange={f('name')} placeholder="e.g. HDFC Millennia" required />
-      <Input label="Bank" value={form.bank} onChange={f('bank')} placeholder="e.g. HDFC Bank" required />
+      <Select label="Type" value={form.type} onChange={(e) => setForm(p => ({ ...p, type: e.target.value as any }))}>
+        <option value="CARD">Credit Card</option>
+        <option value="PAYLATER">Pay Later</option>
+      </Select>
+      <Input label={form.type === 'PAYLATER' ? "Account Name" : "Card Name"} value={form.name} onChange={f('name')} placeholder={form.type === 'PAYLATER' ? "e.g. Amazon Pay Later" : "e.g. HDFC Millennia"} required />
+      <Input label={form.type === 'PAYLATER' ? "Provider" : "Bank"} value={form.bank} onChange={f('bank')} placeholder={form.type === 'PAYLATER' ? "e.g. Amazon" : "e.g. HDFC Bank"} required />
       <Input label="Total Limit" type="number" value={form.totalLimit} onChange={f('totalLimit')} required />
       <Input label="Current Used Amount" type="number" value={form.usedLimit} onChange={f('usedLimit')} />
       <Input label="Current Due Amount" type="number" value={form.dueAmount} onChange={f('dueAmount')} />
@@ -96,7 +101,7 @@ function CreditCardForm({ onSuccess, initial }: { onSuccess: () => void; initial
           ))}
         </div>
       </div>
-      <Button type="submit" size="lg" loading={loading}>{initial ? 'Update Card' : 'Add Card'}</Button>
+      <Button type="submit" size="lg" loading={loading}>{initial ? 'Update' : 'Add'}</Button>
     </form>
   )
 }
@@ -107,13 +112,17 @@ export default function AccountsPage() {
   const [cards, setCards] = useState<CreditCard[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [sheet, setSheet] = useState<{ type: 'account' | 'card'; edit?: Account | CreditCard } | null>(null)
+  const [mounted, setMounted] = useState(false)
 
   async function load() {
     const [a, c] = await Promise.all([fetch('/api/accounts').then(r => r.json()), fetch('/api/credit-cards').then(r => r.json())])
     setAccounts(a); setCards(c)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    setMounted(true)
+  }, [])
 
   async function deleteAccount(id: string) {
     if (!confirm('Delete this account?')) return
@@ -133,7 +142,7 @@ export default function AccountsPage() {
           <button key={t} onClick={() => setTab(t)}
             className={cn('flex-1 py-2.5 text-sm font-medium transition-colors',
               tab === t ? 'bg-primary text-white' : 'text-gray-500 dark:text-gray-400')}>
-            {t === 'accounts' ? 'Bank & Wallets' : 'Credit Cards'}
+            {t === 'accounts' ? 'Bank & Wallets' : 'Cards & Pay Later'}
           </button>
         ))}
       </div>
@@ -174,7 +183,7 @@ export default function AccountsPage() {
       {tab === 'cards' && (
         <div className="space-y-3">
           <Button onClick={() => setSheet({ type: 'card' })} variant="outline" className="w-full gap-2">
-            <Plus size={16} /> Add Credit Card
+            <Plus size={16} /> Add Card / Pay Later
           </Button>
           {cards.map(card => {
             const pct = (card.usedLimit / card.totalLimit) * 100
@@ -184,10 +193,15 @@ export default function AccountsPage() {
                 <div className="p-4">
                   <div className="flex justify-between items-start mb-3">
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{card.bank}</p>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{card.bank}</p>
+                        <Badge className="bg-surface-offset dark:bg-gray-800 text-[9px] text-gray-500 dark:text-gray-400 font-medium px-1.5 py-0.5 rounded">
+                          {card.type === 'PAYLATER' ? 'Pay Later' : 'Credit Card'}
+                        </Badge>
+                      </div>
                       <div className="flex items-center gap-2">
                         <p className="font-semibold dark:text-white">{card.name}</p>
-                        {card.dueAmount > 0 && new Date().getDate() > card.dueDate && (
+                        {mounted && card.dueAmount > 0 && new Date().getDate() > card.dueDate && (
                           <Badge className="bg-danger/10 text-danger dark:bg-danger/20 text-[10px] font-semibold uppercase tracking-wider py-0.5 px-2">Overdue</Badge>
                         )}
                         {card.usedLimit > card.totalLimit && (

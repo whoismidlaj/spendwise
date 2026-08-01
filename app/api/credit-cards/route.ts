@@ -14,6 +14,7 @@ const cardSchema = z.object({
   dueDate: z.number().min(1).max(31),
   statementDate: z.number().min(1).max(31),
   color: z.string().default('#006494'),
+  type: z.enum(['CARD', 'PAYLATER']).default('CARD'),
 })
 
 export async function GET() {

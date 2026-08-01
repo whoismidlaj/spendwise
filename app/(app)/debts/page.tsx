@@ -37,14 +37,12 @@ const TYPE_LABELS: Record<string, string> = {
   PERSONAL: 'Personal Debt',
   LOAN: 'Loan',
   CREDIT_LINE: 'Credit Line',
-  PAY_LATER: 'Pay Later',
 }
 
 const TYPE_COLORS: Record<string, string> = {
   PERSONAL: '#3b82f6',
   LOAN: '#01696f',
   CREDIT_LINE: '#a855f7',
-  PAY_LATER: '#f97316',
 }
 
 const PRIORITY_COLORS: Record<string, string> = {

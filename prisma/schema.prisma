@@ -58,6 +58,7 @@ model CreditCard {
   dueDate       Int
   statementDate Int
   color         String   @default("#006494")
+  type          String   @default("CARD")
   isActive      Boolean  @default(true)
   reminderDays  Int      @default(3)
   createdAt     DateTime @default(now())
