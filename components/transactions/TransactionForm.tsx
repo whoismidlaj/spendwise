@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Button, Input, Select } from '@/components/ui'
+import { Button, Input, Select, DatePicker } from '@/components/ui'
 import { cn } from '@/lib/utils'
 
 const schema = z.object({
@@ -120,7 +120,7 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
 
       <Input label="Name" placeholder="e.g., Swiggy order" error={errors.name?.message} {...register('name')} />
       <Input label="Description (optional)" placeholder="Notes..." {...register('description')} />
-      <Input label="Date" type="date" error={errors.date?.message} {...register('date')} />
+      <DatePicker label="Date" error={errors.date?.message} {...register('date')} />
 
       {/* Category Grid */}
       {filteredCategories.length > 0 && (

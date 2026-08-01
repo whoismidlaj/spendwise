@@ -3,12 +3,14 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { id } = await params
+
   const existing = await prisma.transaction.findFirst({
-    where: { id: params.id, userId: session.user.id },
+    where: { id, userId: session.user.id },
   })
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -43,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const body = await req.json()
   const updated = await prisma.transaction.update({
-    where: { id: params.id },
+    where: { id },
     data: {
       ...body,
       date: body.date ? new Date(body.date) : undefined,
@@ -87,12 +89,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(toJson(updated))
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { id } = await params
+
   const existing = await prisma.transaction.findFirst({
-    where: { id: params.id, userId: session.user.id },
+    where: { id, userId: session.user.id },
   })
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -125,6 +129,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     }
   }
 
-  await prisma.transaction.delete({ where: { id: params.id } })
+  await prisma.transaction.delete({ where: { id } })
   return NextResponse.json({ success: true })
 }

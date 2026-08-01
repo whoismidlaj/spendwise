@@ -3,35 +3,39 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { id } = await params
+
   const card = await prisma.creditCard.findFirst({
-    where: { id: params.id, userId: session.user.id },
+    where: { id, userId: session.user.id },
   })
   if (!card) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const body = await req.json()
   const updated = await prisma.creditCard.update({
-    where: { id: params.id },
+    where: { id },
     data: body,
   })
 
   return NextResponse.json(toJson(updated))
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { id } = await params
+
   const card = await prisma.creditCard.findFirst({
-    where: { id: params.id, userId: session.user.id },
+    where: { id, userId: session.user.id },
   })
   if (!card) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   await prisma.creditCard.update({
-    where: { id: params.id },
+    where: { id },
     data: { isActive: false },
   })
 

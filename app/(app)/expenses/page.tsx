@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { formatCurrency, remainingPrincipal } from '@/lib/currency'
-import { Card, Button, Sheet, Input, Select, FAB, Badge, ProgressBar } from '@/components/ui'
+import { Card, Button, Sheet, Input, Select, FAB, Badge, ProgressBar, DatePicker } from '@/components/ui'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -53,7 +53,7 @@ function RecurringForm({ onSuccess }: { onSuccess: () => void }) {
         <Input label="EMI Date (day)" type="number" min="1" max="31" value={form.emiDate} onChange={f('emiDate')} required />
         <Input label="Total EMIs" type="number" value={form.totalEMIs} onChange={f('totalEMIs')} placeholder="0 = ongoing" />
       </div>
-      <Input label="Start Date" type="date" value={form.startDate} onChange={f('startDate')} required />
+      <DatePicker label="Start Date" name="startDate" value={form.startDate} onChange={f('startDate')} required />
       <Select label="Linked Account" value={form.accountId} onChange={f('accountId') as (e: React.ChangeEvent<HTMLSelectElement>) => void}>
         <option value="">None</option>
         {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}

@@ -1,6 +1,7 @@
 'use client'
 import { cn } from '@/lib/utils'
 import React, { ButtonHTMLAttributes, InputHTMLAttributes, SelectHTMLAttributes, forwardRef } from 'react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 
 // Button
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -291,3 +292,174 @@ export function ProgressBar({
     </div>
   )
 }
+
+// DatePicker
+interface DatePickerProps {
+  label?: string
+  value?: string
+  onChange?: (e: any) => void
+  onBlur?: (e: any) => void
+  name?: string
+  error?: string
+  required?: boolean
+  className?: string
+}
+
+export const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(function DatePicker(
+  { label, value, onChange, onBlur, name, error, required, className, ...props }, ref
+) {
+  const [isOpen, setIsOpen] = React.useState(false)
+  const inputRef = React.useRef<HTMLInputElement | null>(null)
+  
+  const setRefs = React.useCallback((node: HTMLInputElement | null) => {
+    inputRef.current = node
+    if (typeof ref === 'function') {
+      ref(node)
+    } else if (ref) {
+      (ref as any).current = node
+    }
+  }, [ref])
+
+  const [dateVal, setDateVal] = React.useState('')
+
+  React.useEffect(() => {
+    if (value !== undefined) {
+      setDateVal(value)
+    } else if (inputRef.current) {
+      setDateVal(inputRef.current.value)
+    }
+  }, [value])
+
+  const [currentDate, setCurrentDate] = React.useState(() => {
+    const initial = value || dateVal
+    return initial ? new Date(initial) : new Date()
+  })
+
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+
+  const firstDay = new Date(year, month, 1).getDay()
+  const blanksCount = firstDay === 0 ? 6 : firstDay - 1
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  
+  const blanks = Array(blanksCount).fill(null)
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+  const calendarCells = [...blanks, ...days]
+
+  const handleDateSelect = (day: number) => {
+    const selectedDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    setDateVal(selectedDateStr)
+    setIsOpen(false)
+    
+    if (inputRef.current) {
+      inputRef.current.value = selectedDateStr
+      const event = new Event('change', { bubbles: true })
+      inputRef.current.dispatchEvent(event)
+    }
+    if (onChange) {
+      onChange({ target: { name, value: selectedDateStr } })
+    }
+  }
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1))
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1))
+
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ]
+
+  const weekdays = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+
+  const displayDate = () => {
+    if (!dateVal) return 'Select date'
+    const [y, m, d] = dateVal.split('-')
+    const dateObj = new Date(Number(y), Number(m) - 1, Number(d))
+    return dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  }
+
+  return (
+    <div className="flex flex-col gap-1 relative w-full">
+      {label && <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>}
+      
+      <input
+        ref={setRefs}
+        type="date"
+        name={name}
+        className="sr-only"
+        value={dateVal}
+        onChange={onChange}
+        onBlur={onBlur}
+        required={required}
+        {...props}
+      />
+
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          'flex items-center justify-between px-3 py-2.5 rounded-xl border border-border dark:border-gray-700 bg-white dark:bg-gray-800',
+          'text-gray-900 dark:text-white text-left text-sm min-h-[44px] w-full',
+          'focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors',
+          error && 'border-danger',
+          className
+        )}
+      >
+        <span className={cn(!dateVal && 'text-gray-400 dark:text-gray-500')}>{displayDate()}</span>
+        <CalendarIcon className="w-4.5 h-4.5 text-gray-400" />
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-[110]" onClick={() => setIsOpen(false)} />
+          <div className="absolute left-0 top-full mt-1.5 z-[120] bg-white dark:bg-gray-950 border border-border dark:border-gray-800 rounded-2xl shadow-xl p-4 w-72">
+            <div className="flex items-center justify-between mb-4">
+              <button type="button" onClick={prevMonth} className="p-1 hover:bg-surface-offset dark:hover:bg-gray-800 rounded-lg">
+                <ChevronLeft className="w-4 h-4 dark:text-white" />
+              </button>
+              <span className="font-semibold text-sm dark:text-white">
+                {monthNames[month]} {year}
+              </span>
+              <button type="button" onClick={nextMonth} className="p-1 hover:bg-surface-offset dark:hover:bg-gray-800 rounded-lg">
+                <ChevronRight className="w-4 h-4 dark:text-white" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1 text-center mb-1">
+              {weekdays.map(d => (
+                <span key={d} className="text-xs font-semibold text-gray-400 dark:text-gray-500 py-1">
+                  {d}
+                </span>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1 text-center">
+              {calendarCells.map((day, idx) => {
+                if (day === null) return <div key={`empty-${idx}`} />
+                
+                const isSelected = dateVal === `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                
+                return (
+                  <button
+                    key={`day-${day}`}
+                    type="button"
+                    onClick={() => handleDateSelect(day)}
+                    className={cn(
+                      "h-8 w-8 text-xs rounded-full flex items-center justify-center transition-colors dark:text-white",
+                      isSelected
+                        ? "bg-primary text-white font-semibold"
+                        : "hover:bg-surface-offset dark:hover:bg-gray-800"
+                    )}
+                  >
+                    {day}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
+      {error && <p className="text-xs text-danger mt-0.5">{error}</p>}
+    </div>
+  )
+})

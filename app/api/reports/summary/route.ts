@@ -36,11 +36,11 @@ export async function GET(req: NextRequest) {
     }),
   ])
 
-  const categoryIds = byCategory.map((b) => b.categoryId).filter(Boolean) as string[]
+  const categoryIds = byCategory.map((b: any) => b.categoryId).filter(Boolean) as string[]
   const categories = await prisma.category.findMany({
     where: { id: { in: categoryIds } },
   })
-  const catMap = Object.fromEntries(categories.map((c) => [c.id, c]))
+  const catMap = Object.fromEntries(categories.map((c: any) => [c.id, c]))
 
   const totalIncome = Number(income._sum.amount || 0)
   const totalExpense = Number(expense._sum.amount || 0)
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
       totalIncome,
       totalExpense,
       netSavings: totalIncome - totalExpense,
-      byCategory: byCategory.map((b) => ({
+      byCategory: byCategory.map((b: any) => ({
         categoryId: b.categoryId,
         name: catMap[b.categoryId!]?.name ?? 'Uncategorized',
         color: catMap[b.categoryId!]?.color ?? '#6b7280',

@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react'
 import { Card, Button, Input, Select } from '@/components/ui'
 import { signOut } from 'next-auth/react'
-import { User, Lock, Globe, Tag, Trash2 } from 'lucide-react'
+import { User, Lock, Globe, Tag, Trash2, Database } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface UserProfile { id: string; name: string; email: string; currency: string }
 interface Category { id: string; name: string; icon: string; color: string; type: string; isSystem: boolean }
@@ -26,6 +27,8 @@ export default function SettingsPage() {
   const [pwLoading, setPwLoading] = useState(false)
   const [msg, setMsg] = useState('')
   const [pwMsg, setPwMsg] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState('')
 
   async function load() {
     const [user, cats] = await Promise.all([
@@ -63,6 +66,40 @@ export default function SettingsPage() {
   async function deleteCategory(id: string) {
     if (!confirm('Delete this category?')) return
     await fetch(`/api/categories?id=${id}`, { method: 'DELETE' }); load()
+  }
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportMsg('')
+    
+    if (!confirm('Importing data will OVERWRITE all your existing transactions, accounts, credit cards, and categories. Do you want to proceed?')) {
+      e.target.value = ''
+      return
+    }
+
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      const res = await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      const result = await res.json()
+      if (res.ok) {
+        setImportMsg('Data imported successfully!')
+        load()
+      } else {
+        setImportMsg(result.error || 'Import failed')
+      }
+    } catch (err: any) {
+      setImportMsg('Invalid backup file format')
+    } finally {
+      setImporting(false)
+      e.target.value = ''
+    }
   }
 
   return (
@@ -142,6 +179,51 @@ export default function SettingsPage() {
               )}
             </div>
           ))}
+        </div>
+      </Card>
+
+      {/* Backup & Restore */}
+      <Card className="p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Database size={16} className="text-primary" />
+          <h2 className="font-semibold dark:text-white">Backup & Restore</h2>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Export your accounts, credit cards, transactions, and categories to a JSON backup file, or restore from a previous backup.
+        </p>
+        <div className="flex flex-col gap-3">
+          <a
+            href="/api/export"
+            download
+            className="inline-flex items-center justify-center font-medium rounded-xl transition-all min-h-[44px] px-4 py-2.5 text-sm bg-primary hover:bg-primary-hover text-white text-center"
+          >
+            Export Data (JSON)
+          </a>
+          
+          <div className="relative">
+            <input
+              type="file"
+              accept=".json"
+              onChange={handleImport}
+              className="hidden"
+              id="import-file"
+              disabled={importing}
+            />
+            <label
+              htmlFor="import-file"
+              className={cn(
+                "inline-flex items-center justify-center font-medium rounded-xl transition-all min-h-[44px] px-4 py-2.5 text-sm border border-border dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-surface-offset dark:hover:bg-gray-800 w-full cursor-pointer text-center",
+                importing && "opacity-50 pointer-events-none"
+              )}
+            >
+              {importing ? 'Importing...' : 'Import Backup (JSON)'}
+            </label>
+          </div>
+          {importMsg && (
+            <p className={cn("text-xs text-center mt-1", importMsg.includes('successfully') ? "text-success" : "text-danger")}>
+              {importMsg}
+            </p>
+          )}
         </div>
       </Card>
 

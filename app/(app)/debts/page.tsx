@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { formatCurrency } from '@/lib/currency'
-import { Card, Button, Sheet, Input, Select, FAB, Badge, ProgressBar } from '@/components/ui'
+import { Card, Button, Sheet, Input, Select, FAB, Badge, ProgressBar, DatePicker } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { CheckCircle, AlertCircle, Calendar, Trash2, Landmark, Coins } from 'lucide-react'
 
@@ -502,9 +502,9 @@ export default function DebtsPage() {
               />
             </div>
           ) : (
-            <Input
+            <DatePicker
               label="Payoff Deadline"
-              type="date"
+              name="deadline"
               value={debtForm.deadline}
               onChange={(e) => setDebtForm((p) => ({ ...p, deadline: e.target.value }))}
             />

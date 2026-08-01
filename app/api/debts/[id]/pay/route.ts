@@ -9,9 +9,11 @@ const paymentSchema = z.object({
   accountId: z.string().optional(),
 })
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
 
   try {
     const body = await req.json()
@@ -21,16 +23,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const { amount, accountId } = parsed.data
 
     const debt = await prisma.debt.findFirst({
-      where: { id: params.id, userId: session.user.id },
+      where: { id, userId: session.user.id },
     })
     if (!debt) return NextResponse.json({ error: 'Debt not found' }, { status: 404 })
 
     const newRemaining = Math.max(0, Number(debt.remaining) - amount)
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // 1. Update remaining balance of the debt
       const updatedDebt = await tx.debt.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           remaining: newRemaining,
           isActive: newRemaining > 0,
@@ -40,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // 2. Create the DebtPayment record
       const payment = await tx.debtPayment.create({
         data: {
-          debtId: params.id,
+          debtId: id,
           amount,
           accountId: accountId || null,
         },

@@ -3,12 +3,14 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
 
-export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { id } = await params
+
   const item = await prisma.recurringExpense.findFirst({
-    where: { id: params.id, userId: session.user.id },
+    where: { id, userId: session.user.id },
   })
   if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -46,7 +48,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
   // Update paidEMIs
   const updated = await prisma.recurringExpense.update({
-    where: { id: params.id },
+    where: { id },
     data: { paidEMIs: newPaidEMIs },
     include: { account: { select: { name: true } } },
   })
