@@ -10,6 +10,7 @@ const cardSchema = z.object({
   totalLimit: z.number().positive(),
   usedLimit: z.number().min(0).default(0),
   dueAmount: z.number().min(0).default(0),
+  minimumDue: z.number().min(0).default(0),
   dueDate: z.number().min(1).max(31),
   statementDate: z.number().min(1).max(31),
   color: z.string().default('#006494'),

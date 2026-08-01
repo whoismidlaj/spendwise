@@ -35,7 +35,8 @@ model Account {
   createdAt DateTime    @default(now())
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions      Transaction[]
+  transactions      Transaction[]      @relation("AccountTransactions")
+  toTransactions    Transaction[]      @relation("ToAccountTransactions")
   recurringExpenses RecurringExpense[]
 }
 
@@ -53,6 +54,7 @@ model CreditCard {
   totalLimit    Decimal  @db.Decimal(15, 2)
   usedLimit     Decimal  @db.Decimal(15, 2) @default(0)
   dueAmount     Decimal  @db.Decimal(15, 2) @default(0)
+  minimumDue    Decimal  @db.Decimal(15, 2) @default(0)
   dueDate       Int
   statementDate Int
   color         String   @default("#006494")
@@ -82,6 +84,7 @@ model Transaction {
   id           String          @id @default(cuid())
   userId       String
   accountId    String?
+  toAccountId  String?
   creditCardId String?
   categoryId   String?
   type         TransactionType
@@ -93,7 +96,8 @@ model Transaction {
   updatedAt    DateTime        @updatedAt
 
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account    Account?    @relation(fields: [accountId], references: [id])
+  account    Account?    @relation("AccountTransactions", fields: [accountId], references: [id])
+  toAccount  Account?    @relation("ToAccountTransactions", fields: [toAccountId], references: [id])
   creditCard CreditCard? @relation(fields: [creditCardId], references: [id])
   category   Category?   @relation(fields: [categoryId], references: [id])
 }

@@ -11,6 +11,7 @@ const txSchema = z.object({
   description: z.string().optional(),
   date: z.string(),
   accountId: z.string().optional().nullable(),
+  toAccountId: z.string().optional().nullable(),
   creditCardId: z.string().optional().nullable(),
   categoryId: z.string().optional().nullable(),
 })
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         account: { select: { name: true, color: true } },
+        toAccount: { select: { name: true, color: true } },
         creditCard: { select: { name: true, color: true } },
         category: { select: { name: true, icon: true, color: true } },
       },
@@ -99,17 +101,32 @@ export async function POST(req: NextRequest) {
       description: data.description,
       date: new Date(data.date),
       accountId: data.accountId || null,
+      toAccountId: data.toAccountId || null,
       creditCardId: data.creditCardId || null,
       categoryId: data.categoryId || null,
     },
     include: {
       account: { select: { name: true, color: true } },
+      toAccount: { select: { name: true, color: true } },
       category: { select: { name: true, icon: true, color: true } },
     },
   })
 
   // Update account balance
-  if (data.accountId) {
+  if (data.type === 'TRANSFER') {
+    if (data.accountId) {
+      await prisma.account.update({
+        where: { id: data.accountId },
+        data: { balance: { decrement: data.amount } },
+      })
+    }
+    if (data.toAccountId) {
+      await prisma.account.update({
+        where: { id: data.toAccountId },
+        data: { balance: { increment: data.amount } },
+      })
+    }
+  } else if (data.accountId) {
     const delta = data.type === 'INCOME' ? data.amount : data.type === 'EXPENSE' ? -data.amount : 0
     if (delta !== 0) {
       await prisma.account.update({

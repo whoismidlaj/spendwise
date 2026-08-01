@@ -13,7 +13,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Reverse old balance effect
-  if (existing.accountId) {
+  if (existing.type === 'TRANSFER') {
+    if (existing.accountId) {
+      await prisma.account.update({
+        where: { id: existing.accountId },
+        data: { balance: { increment: Number(existing.amount) } },
+      })
+    }
+    if (existing.toAccountId) {
+      await prisma.account.update({
+        where: { id: existing.toAccountId },
+        data: { balance: { decrement: Number(existing.amount) } },
+      })
+    }
+  } else if (existing.accountId) {
     const oldDelta =
       existing.type === 'INCOME'
         ? -Number(existing.amount)
@@ -37,12 +50,26 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     },
     include: {
       account: { select: { name: true, color: true } },
+      toAccount: { select: { name: true, color: true } },
       category: { select: { name: true, icon: true, color: true } },
     },
   })
 
   // Apply new balance effect
-  if (updated.accountId) {
+  if (updated.type === 'TRANSFER') {
+    if (updated.accountId) {
+      await prisma.account.update({
+        where: { id: updated.accountId },
+        data: { balance: { decrement: Number(updated.amount) } },
+      })
+    }
+    if (updated.toAccountId) {
+      await prisma.account.update({
+        where: { id: updated.toAccountId },
+        data: { balance: { increment: Number(updated.amount) } },
+      })
+    }
+  } else if (updated.accountId) {
     const newDelta =
       updated.type === 'INCOME'
         ? Number(updated.amount)
@@ -70,7 +97,20 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Reverse balance effect
-  if (existing.accountId) {
+  if (existing.type === 'TRANSFER') {
+    if (existing.accountId) {
+      await prisma.account.update({
+        where: { id: existing.accountId },
+        data: { balance: { increment: Number(existing.amount) } },
+      })
+    }
+    if (existing.toAccountId) {
+      await prisma.account.update({
+        where: { id: existing.toAccountId },
+        data: { balance: { decrement: Number(existing.amount) } },
+      })
+    }
+  } else if (existing.accountId) {
     const delta =
       existing.type === 'INCOME'
         ? -Number(existing.amount)

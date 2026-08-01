@@ -69,31 +69,112 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   )
 })
 
-// Select — forwardRef
+// Select — Custom styled component that integrates seamlessly with react-hook-form
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
   error?: string
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, error, className, children, ...props }, ref
+  { label, error, className, children, value, onChange, onBlur, name, ...props }, ref
 ) {
+  const [isOpen, setIsOpen] = React.useState(false)
+  const selectRef = React.useRef<HTMLSelectElement | null>(null)
+  
+  const setRefs = React.useCallback((node: HTMLSelectElement | null) => {
+    selectRef.current = node
+    if (typeof ref === 'function') {
+      ref(node)
+    } else if (ref) {
+      (ref as any).current = node
+    }
+  }, [ref])
+
+  const options = React.Children.toArray(children)
+    .filter(child => React.isValidElement(child) && child.type === 'option')
+    .map(child => {
+      const el = child as React.ReactElement<React.HTMLProps<HTMLOptionElement>>
+      return {
+        value: String(el.props.value ?? ''),
+        label: String(el.props.children ?? ''),
+      }
+    })
+
+  const [selectedValue, setSelectedValue] = React.useState('')
+
+  React.useEffect(() => {
+    if (value !== undefined) {
+      setSelectedValue(String(value))
+    } else if (selectRef.current) {
+      setSelectedValue(selectRef.current.value)
+    }
+  }, [value, children])
+
+  const selectedOption = options.find(o => o.value === selectedValue) || options[0]
+
+  const handleSelect = (val: string) => {
+    setSelectedValue(val)
+    setIsOpen(false)
+    if (selectRef.current) {
+      selectRef.current.value = val
+      const event = new Event('change', { bubbles: true })
+      selectRef.current.dispatchEvent(event)
+    }
+  }
+
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1 relative w-full">
       {label && <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>}
+      
       <select
-        ref={ref}
-        className={cn(
-          'px-3 py-2.5 rounded-xl border border-border dark:border-gray-700 bg-white dark:bg-gray-800',
-          'text-gray-900 dark:text-white',
-          'focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors appearance-none',
-          error && 'border-danger',
-          className
-        )}
+        ref={setRefs}
+        name={name}
+        value={value}
+        onChange={onChange}
+        onBlur={onBlur}
+        className="sr-only"
         {...props}
       >
         {children}
       </select>
+
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          'flex items-center justify-between px-3 py-2.5 rounded-xl border border-border dark:border-gray-700 bg-white dark:bg-gray-800',
+          'text-gray-900 dark:text-white text-left text-sm min-h-[44px]',
+          'focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors',
+          error && 'border-danger',
+          className
+        )}
+      >
+        <span>{selectedOption?.label || 'Select option'}</span>
+        <svg className={cn("w-4 h-4 text-gray-500 transition-transform ml-2", isOpen && "rotate-180")} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-[110]" onClick={() => setIsOpen(false)} />
+          <div className="absolute left-0 right-0 top-full mt-1.5 z-[120] bg-white dark:bg-gray-900 border border-border dark:border-gray-800 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+            {options.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => handleSelect(opt.value)}
+                className={cn(
+                  'w-full text-left px-3 py-2.5 text-sm hover:bg-surface-offset dark:hover:bg-gray-800 transition-colors dark:text-white',
+                  opt.value === selectedValue && 'bg-primary/5 text-primary dark:text-primary font-medium'
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       {error && <p className="text-xs text-danger mt-0.5">{error}</p>}
     </div>
   )

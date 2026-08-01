@@ -13,6 +13,7 @@ const schema = z.object({
   description: z.string().optional(),
   date: z.string().min(1),
   accountId: z.string().optional(),
+  toAccountId: z.string().optional(),
   creditCardId: z.string().optional(),
   categoryId: z.string().optional(),
 })
@@ -40,6 +41,7 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
       description: initial?.description ?? '',
       date: initial?.date ?? new Date().toISOString().slice(0, 10),
       accountId: initial?.accountId ?? '',
+      toAccountId: initial?.toAccountId ?? '',
       categoryId: initial?.categoryId ?? '',
     },
   })
@@ -67,8 +69,9 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
     const payload = {
       ...data,
       amount: parseFloat(data.amount),
-      accountId: useCard ? undefined : (data.accountId || undefined),
-      creditCardId: useCard ? (data.creditCardId || undefined) : undefined,
+      accountId: type === 'TRANSFER' ? (data.accountId || undefined) : (useCard ? undefined : (data.accountId || undefined)),
+      toAccountId: type === 'TRANSFER' ? (data.toAccountId || undefined) : undefined,
+      creditCardId: type === 'TRANSFER' ? undefined : (useCard ? (data.creditCardId || undefined) : undefined),
       categoryId: data.categoryId || undefined,
     }
 
@@ -171,6 +174,25 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
               {cards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
           )}
+        </div>
+      )}
+
+      {type === 'TRANSFER' && (
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">From Account</label>
+            <Select {...register('accountId')}>
+              <option value="">Select source account</option>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </Select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">To Account</label>
+            <Select {...register('toAccountId')}>
+              <option value="">Select destination account</option>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </Select>
+          </div>
         </div>
       )}
 
