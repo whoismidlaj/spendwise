@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-spendwise}
     volumes:
-      - spendwise_postgres_fresh_volume:/var/lib/postgresql/data
+      - spendwise_postgres_data:/var/lib/postgresql
     expose:
       - "5432"
 
@@ -38,4 +38,4 @@ networks:
     external: true
 
 volumes:
-  spendwise_postgres_fresh_volume:
+  spendwise_postgres_data:
