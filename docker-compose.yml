@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  spendwise-postgres-db:
+    image: postgres:15-alpine
+    restart: always
+    networks:
+      - dokploy-network
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-spendwise}
+    volumes:
+      - spendwise_postgres_fresh_volume:/var/lib/postgresql/data
+    expose:
+      - "5432"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    networks:
+      - dokploy-network
+    ports:
+      - "${APP_PORT:-3300}:3000"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-spendwise}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+    depends_on:
+      - spendwise-postgres-db
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  spendwise_postgres_fresh_volume:
