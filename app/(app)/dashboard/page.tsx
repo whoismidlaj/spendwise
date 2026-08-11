@@ -1,12 +1,26 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { formatCurrency } from '@/lib/currency'
-import { Card, FAB, ProgressBar, Sheet } from '@/components/ui'
+import { Card, FAB, ProgressBar, Sheet, Badge } from '@/components/ui'
 import { TransactionForm } from '@/components/transactions/TransactionForm'
-import { TrendingUp, TrendingDown, CreditCard, Clock } from 'lucide-react'
+import { TrendingUp, TrendingDown, CreditCard, Clock, Calendar, AlertCircle } from 'lucide-react'
 
 interface Account { id: string; name: string; balance: number; type: string; color: string }
-interface CCCard { id: string; name: string; bank: string; totalLimit: number; usedLimit: number; dueAmount: number; dueDate: number; color: string }
+interface CCCard { id: string; name: string; bank: string; totalLimit: number; usedLimit: number; dueAmount: number; minimumDue: number; dueDate: number; statementDate: number; color: string; type: 'CARD' | 'PAYLATER' }
+interface Debt {
+  id: string
+  name: string
+  type: 'PERSONAL' | 'LOAN' | 'CREDIT_LINE' | 'PAY_LATER'
+  amount: number
+  remaining: number
+  interestRate: number
+  isRecurring: boolean
+  paymentDate?: number
+  paymentAmount?: number
+  deadline?: string
+  priority: 'LOW' | 'MEDIUM' | 'HIGH'
+  description?: string
+}
 interface Transaction { id: string; name: string; amount: number; type: string; date: string; category?: { name: string; icon: string; color: string }; account?: { name: string } }
 interface Summary { totalIncome: number; totalExpense: number; netSavings: number }
 
@@ -37,9 +51,17 @@ function daysUntilDueDate(dueDay: number): number {
   return Math.ceil((due.getTime() - now.getTime()) / 86400000)
 }
 
+function getNextDueDate(dueDay: number): Date {
+  const now = new Date()
+  const due = new Date(now.getFullYear(), now.getMonth(), dueDay)
+  if (due < now) due.setMonth(due.getMonth() + 1)
+  return due
+}
+
 export default function DashboardPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [cards, setCards] = useState<CCCard[]>([])
+  const [debts, setDebts] = useState<Debt[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [summary, setSummary] = useState<Summary>({ totalIncome: 0, totalExpense: 0, netSavings: 0 })
   const [fabOpen, setFabOpen] = useState(false)
@@ -50,14 +72,16 @@ export default function DashboardPage() {
     const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
 
-    const [accs, ccs, txs, sum] = await Promise.all([
+    const [accs, ccs, dts, txs, sum] = await Promise.all([
       fetch('/api/accounts').then(r => r.json()),
       fetch('/api/credit-cards').then(r => r.json()),
+      fetch('/api/debts').then(r => r.json()),
       fetch(`/api/transactions?limit=5`).then(r => r.json()),
       fetch(`/api/reports/summary?startDate=${start}&endDate=${end}`).then(r => r.json()),
     ])
     setAccounts(accs)
     setCards(ccs)
+    setDebts(dts)
     setTransactions(txs.transactions || [])
     setSummary(sum)
     setLoading(false)
@@ -75,6 +99,71 @@ export default function DashboardPage() {
     if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
     return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
   }
+
+  // Construct upcoming dues timeline
+  const upcomingDues: Array<{
+    id: string
+    name: string
+    source: 'CARD' | 'PAYLATER' | 'DEBT'
+    amount: number
+    minimumAmount?: number
+    dueDate: Date
+    daysLeft: number
+    typeLabel: string
+  }> = []
+
+  cards.forEach(card => {
+    if (card.dueAmount > 0) {
+      const dueDay = card.dueDate
+      const daysLeft = daysUntilDueDate(dueDay)
+      const dueDate = getNextDueDate(dueDay)
+      upcomingDues.push({
+        id: card.id,
+        name: `${card.bank} ${card.name}`,
+        source: card.type,
+        amount: card.dueAmount,
+        minimumAmount: card.minimumDue,
+        dueDate,
+        daysLeft,
+        typeLabel: card.type === 'PAYLATER' ? 'Pay Later' : 'Credit Card'
+      })
+    }
+  })
+
+  debts.forEach(debt => {
+    if (debt.remaining > 0) {
+      if (debt.isRecurring && debt.paymentDate && debt.paymentAmount) {
+        const dueDay = debt.paymentDate
+        const daysLeft = daysUntilDueDate(dueDay)
+        const dueDate = getNextDueDate(dueDay)
+        upcomingDues.push({
+          id: debt.id,
+          name: debt.name,
+          source: 'DEBT',
+          amount: debt.paymentAmount,
+          dueDate,
+          daysLeft,
+          typeLabel: debt.type === 'PAY_LATER' ? 'Pay Later Debt' : (debt.type === 'LOAN' ? 'Loan EMI' : 'Debt EMI')
+        })
+      } else if (debt.deadline) {
+        const deadlineDate = new Date(debt.deadline)
+        const now = new Date()
+        const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / 86400000)
+        upcomingDues.push({
+          id: debt.id,
+          name: debt.name,
+          source: 'DEBT',
+          amount: debt.remaining,
+          dueDate: deadlineDate,
+          daysLeft,
+          typeLabel: debt.type === 'PAY_LATER' ? 'Pay Later' : (debt.type === 'LOAN' ? 'Loan Payoff' : 'Debt Payoff')
+        })
+      }
+    }
+  })
+
+  // Sort upcoming dues by daysLeft (ascending)
+  upcomingDues.sort((a, b) => a.daysLeft - b.daysLeft)
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -102,20 +191,20 @@ export default function DashboardPage() {
         </div>
       </Card>
 
-      {/* Credit Cards */}
+      {/* Credit Cards & Pay Later Cards List */}
       {cards.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 px-1">Credit Cards</h3>
+          <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 px-1">Cards & Pay Later</h3>
           <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
             {cards.map(card => {
               const pct = (card.usedLimit / card.totalLimit) * 100
               const daysLeft = daysUntilDueDate(card.dueDate)
               return (
-                <Card key={card.id} className="min-w-[220px] p-4 flex-shrink-0">
+                <Card key={card.id} className="min-w-[240px] p-4 flex-shrink-0">
                   <div className="flex justify-between items-start mb-3">
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{card.bank}</p>
-                      <p className="font-semibold text-sm dark:text-white">{card.name}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider mb-0.5">{card.bank} · {card.type === 'PAYLATER' ? 'Pay Later' : 'Card'}</p>
+                      <p className="font-semibold text-sm dark:text-white truncate max-w-[150px]">{card.name}</p>
                     </div>
                     <CreditCard size={16} className="text-gray-400" />
                   </div>
@@ -124,18 +213,68 @@ export default function DashboardPage() {
                     <span className="tabular-nums">{formatCurrency(card.usedLimit)}</span>
                     <span className="tabular-nums">{formatCurrency(card.totalLimit)}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      <Clock size={10} className="inline mr-0.5" />{daysLeft}d to due
-                    </span>
-                    <span className="text-xs font-medium text-danger tabular-nums">
-                      {formatCurrency(card.dueAmount)} due
-                    </span>
+                  <div className="flex justify-between items-start border-t border-border dark:border-gray-800 pt-2 mt-1">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-400">Due</span>
+                      <span className="text-xs font-semibold text-danger tabular-nums">{formatCurrency(card.dueAmount)}</span>
+                    </div>
+                    {card.minimumDue > 0 && (
+                      <div className="flex flex-col items-end">
+                        <span className="text-[10px] text-gray-400">Min Due</span>
+                        <span className="text-xs font-semibold text-warning tabular-nums">{formatCurrency(card.minimumDue)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-2 flex items-center gap-1 justify-center bg-surface-offset dark:bg-gray-800/50 py-1 rounded">
+                    <Clock size={10} />{daysLeft}d left (due {card.dueDate}th)
                   </div>
                 </Card>
               )
             })}
           </div>
+        </div>
+      )}
+
+      {/* Upcoming Bills & Dues Section */}
+      {upcomingDues.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 px-1">Upcoming Bills & Dues</h3>
+          <Card className="divide-y divide-border dark:divide-gray-800 p-1">
+            {upcomingDues.slice(0, 5).map(due => (
+              <div key={due.id} className="flex items-center justify-between px-3 py-3">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <div className={`mt-0.5 p-1.5 rounded-lg flex-shrink-0 ${
+                    due.daysLeft <= 3 
+                      ? 'bg-danger/10 text-danger' 
+                      : due.daysLeft <= 7 
+                      ? 'bg-warning/10 text-warning' 
+                      : 'bg-primary/10 text-primary'
+                  }`}>
+                    <Calendar size={15} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium dark:text-white truncate">{due.name}</p>
+                      <Badge className="bg-surface-offset dark:bg-gray-800 text-[9px] text-gray-500 font-normal px-1 py-0">{due.typeLabel}</Badge>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {due.daysLeft <= 0 ? (
+                        <span className="text-danger font-semibold">Overdue!</span>
+                      ) : (
+                        `Due in ${due.daysLeft} days (${due.dueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})`
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0 pl-2">
+                  <p className="text-sm font-bold text-danger tabular-nums">{formatCurrency(due.amount)}</p>
+                  {due.minimumAmount && due.minimumAmount > 0 ? (
+                    <p className="text-[10px] text-gray-400">Min: {formatCurrency(due.minimumAmount)}</p>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </Card>
         </div>
       )}
 
