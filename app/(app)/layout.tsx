@@ -9,7 +9,6 @@ const tabs = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/accounts', icon: Wallet, label: 'Accounts' },
   { href: '/transactions', icon: ArrowLeftRight, label: 'Transactions' },
-  { href: '/expenses', icon: RefreshCcw, label: 'Expenses' },
   { href: '/debts', icon: Coins, label: 'Debts' },
   { href: '/reports', icon: BarChart3, label: 'Reports' },
 ]
@@ -18,11 +17,11 @@ const pageTitles: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/accounts': 'Accounts',
   '/transactions': 'Transactions',
-  '/expenses': 'Expenses',
   '/debts': 'Debts',
   '/reports': 'Reports',
   '/settings': 'Settings',
 }
+
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()

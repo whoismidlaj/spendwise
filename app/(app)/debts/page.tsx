@@ -1,9 +1,9 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { formatCurrency } from '@/lib/currency'
+import { useEffect, useState, useCallback } from 'react'
+import { formatCurrency, remainingPrincipal } from '@/lib/currency'
 import { Card, Button, Sheet, Input, Select, FAB, Badge, ProgressBar, DatePicker } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { CheckCircle, AlertCircle, Calendar, Trash2, Landmark, Coins, Edit2 } from 'lucide-react'
+import { CheckCircle, AlertCircle, Calendar, Trash2, Landmark, Coins, Edit2, CreditCard, RefreshCw } from 'lucide-react'
 
 interface DebtPayment {
   id: string
@@ -26,6 +26,61 @@ interface Debt {
   priority: 'LOW' | 'MEDIUM' | 'HIGH'
   description?: string
   payments: DebtPayment[]
+}
+
+interface CreditCardItem {
+  id: string
+  name: string
+  bank: string
+  type: 'CREDIT' | 'PAYLATER'
+  totalLimit: number
+  usedLimit: number
+  dueAmount: number
+  minimumDue: number
+  dueDate: number
+}
+
+interface RecurringItem {
+  id: string
+  name: string
+  type: string
+  loanAmount?: number
+  interestRate?: number
+  emiAmount: number
+  emiDate: number
+  totalEMIs?: number
+  paidEMIs: number
+  isActive: boolean
+}
+
+interface UpcomingItem {
+  id: string
+  sourceId: string
+  name: string
+  source: 'CREDIT_CARD' | 'RECURRING' | 'DEBT'
+  typeLabel: string
+  amount: number
+  dueDate: string
+  dueDay: number
+  daysLeft: number
+  isOverdue: boolean
+  color?: string
+  bank?: string
+  accountName?: string
+  accountId?: string
+  minimumAmount?: number
+  remainingTotal?: number
+  paidCount?: number
+  totalCount?: number
+}
+
+interface UpcomingSummary {
+  total: number
+  creditCards: number
+  recurring: number
+  debts: number
+  totalCount: number
+  overdueCount: number
 }
 
 interface Account {
@@ -54,22 +109,25 @@ const PRIORITY_COLORS: Record<string, string> = {
 }
 
 export default function DebtsPage() {
-  const [tab, setTab] = useState<'active' | 'history'>('active')
+  const [tab, setTab] = useState<'active' | 'upcoming' | 'history'>('active')
   const [debts, setDebts] = useState<Debt[]>([])
+  const [creditCards, setCreditCards] = useState<CreditCardItem[]>([])
+  const [recurringList, setRecurringList] = useState<RecurringItem[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Sheets
   const [addSheetOpen, setAddSheetOpen] = useState(false)
   const [editSheetOpen, setEditSheetOpen] = useState(false)
   const [paySheetOpen, setPaySheetOpen] = useState(false)
   const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null)
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
 
-  // Filter & Sort States
+  // Filter & Sort States for Debts
   const [typeFilter, setTypeFilter] = useState<'ALL' | Debt['type']>('ALL')
   const [sortBy, setSortBy] = useState<'priority' | 'date' | 'amount' | 'created'>('priority')
 
   // Add Debt Form State
-
   const [debtForm, setDebtForm] = useState({
     name: '',
     type: 'PERSONAL' as Debt['type'],
@@ -99,57 +157,155 @@ export default function DebtsPage() {
     description: '',
   })
 
-  // Pay Debt Form State
-  const [payForm, setPayForm] = useState({
-    amount: '',
-    accountId: '',
+  // Debt Pay Form State
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentAccountId, setPaymentAccountId] = useState('')
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10))
+
+  // Upcoming Dues States
+  const [upcomingTimeframe, setUpcomingTimeframe] = useState<'thisMonth' | 'next7Days' | 'next30Days' | 'nextMonth' | 'custom'>('thisMonth')
+  const [customRange, setCustomRange] = useState({
+    startDate: new Date().toISOString().slice(0, 10),
+    endDate: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().slice(0, 10),
   })
+  const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([])
+  const [upcomingSummary, setUpcomingSummary] = useState<UpcomingSummary>({
+    total: 0, creditCards: 0, recurring: 0, debts: 0, totalCount: 0, overdueCount: 0,
+  })
+  const [upcomingFilter, setUpcomingFilter] = useState<'ALL' | 'CREDIT_CARD' | 'RECURRING' | 'DEBT'>('ALL')
+  const [upcomingLoading, setUpcomingLoading] = useState(false)
+  const [payingId, setPayingId] = useState<string | null>(null)
 
-  const [formLoading, setFormLoading] = useState(false)
+  // Quick Pay Modal for Upcoming Dues
+  const [payModalItem, setPayModalItem] = useState<UpcomingItem | null>(null)
+  const [payModalAmount, setPayModalAmount] = useState('')
+  const [payModalAccountId, setPayModalAccountId] = useState('')
+  const [payModalLoading, setPayModalLoading] = useState(false)
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    setLoading(true)
     try {
-      const [debtsRes, accountsRes] = await Promise.all([
+      const [debtsRes, accsRes, cardsRes, recRes] = await Promise.all([
         fetch('/api/debts').then((r) => r.json()),
         fetch('/api/accounts').then((r) => r.json()),
+        fetch('/api/credit-cards').then((r) => r.json()),
+        fetch('/api/recurring').then((r) => r.json()),
       ])
-      setDebts(debtsRes)
-      setAccounts(accountsRes)
-    } catch (e) {
-      console.error(e)
+      setDebts(debtsRes || [])
+      setAccounts(accsRes || [])
+      setCreditCards(cardsRes || [])
+      setRecurringList(recRes || [])
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  function getUpcomingDates(tf: typeof upcomingTimeframe) {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+    
+    if (tf === 'thisMonth') {
+      return {
+        start: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0),
+        end: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999),
+      }
+    }
+    if (tf === 'next7Days') {
+      const end = new Date(today)
+      end.setDate(end.getDate() + 7)
+      end.setHours(23, 59, 59, 999)
+      return { start: today, end }
+    }
+    if (tf === 'next30Days') {
+      const end = new Date(today)
+      end.setDate(end.getDate() + 30)
+      end.setHours(23, 59, 59, 999)
+      return { start: today, end }
+    }
+    if (tf === 'nextMonth') {
+      return {
+        start: new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0),
+        end: new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59, 999),
+      }
+    }
+    return {
+      start: new Date(`${customRange.startDate}T00:00:00`),
+      end: new Date(`${customRange.endDate}T23:59:59`),
+    }
   }
+
+  const loadUpcoming = useCallback(async () => {
+    setUpcomingLoading(true)
+    try {
+      const { start, end } = getUpcomingDates(upcomingTimeframe)
+      const res = await fetch(`/api/expenses/upcoming?startDate=${start.toISOString()}&endDate=${end.toISOString()}`).then(r => r.json())
+      setUpcomingItems(res.items || [])
+      setUpcomingSummary(res.summary || {
+        total: 0, creditCards: 0, recurring: 0, debts: 0, totalCount: 0, overdueCount: 0,
+      })
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setUpcomingLoading(false)
+    }
+  }, [upcomingTimeframe, customRange.startDate, customRange.endDate])
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [loadData])
 
+  useEffect(() => {
+    if (tab === 'upcoming') {
+      loadUpcoming()
+    }
+  }, [tab, loadUpcoming])
+
+  // AGGREGATED DEBT CALCULATIONS
+  const personalDebtsTotal = debts.reduce((sum, d) => sum + Number(d.remaining || 0), 0)
+  
+  const creditCardsTotal = creditCards.reduce((sum, c) => {
+    const used = Number(c.usedLimit || 0)
+    const due = Number(c.dueAmount || 0)
+    return sum + (used > 0 ? used : due)
+  }, 0)
+
+  const loansRemainingTotal = recurringList
+    .filter(r => (r.type === 'EMI' || r.type === 'LOAN') && r.loanAmount && r.totalEMIs)
+    .reduce((sum, r) => {
+      const rem = remainingPrincipal(r.loanAmount!, r.interestRate ?? 0, r.totalEMIs!, r.paidEMIs)
+      return sum + (rem || 0)
+    }, 0)
+
+  const totalAggregatedDebt = personalDebtsTotal + creditCardsTotal + loansRemainingTotal
+
+  // Handlers for Debts
   async function handleAddDebt(e: React.FormEvent) {
     e.preventDefault()
-    setFormLoading(true)
+    setLoading(true)
     try {
-      const body = {
+      const payload: any = {
         name: debtForm.name,
         type: debtForm.type,
         amount: parseFloat(debtForm.amount),
-        interestRate: parseFloat(debtForm.interestRate || '0'),
+        interestRate: parseFloat(debtForm.interestRate) || 0,
         isRecurring: debtForm.isRecurring,
-        paymentDate: debtForm.isRecurring ? parseInt(debtForm.paymentDate) : null,
-        paymentAmount: debtForm.isRecurring ? parseFloat(debtForm.paymentAmount) : null,
-        deadline: !debtForm.isRecurring && debtForm.deadline ? debtForm.deadline : null,
         priority: debtForm.priority,
-        description: debtForm.description || null,
+        description: debtForm.description || undefined,
+      }
+      if (debtForm.isRecurring) {
+        payload.paymentDate = parseInt(debtForm.paymentDate, 10)
+        payload.paymentAmount = parseFloat(debtForm.paymentAmount)
+      } else if (debtForm.deadline) {
+        payload.deadline = debtForm.deadline
       }
 
       await fetch('/api/debts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       })
 
-      // Reset Form
+      setAddSheetOpen(false)
       setDebtForm({
         name: '',
         type: 'PERSONAL',
@@ -163,16 +319,13 @@ export default function DebtsPage() {
         priority: 'MEDIUM',
         description: '',
       })
-      setAddSheetOpen(false)
       loadData()
-    } catch (e) {
-      console.error(e)
     } finally {
-      setFormLoading(false)
+      setLoading(false)
     }
   }
 
-  function openEditDebtModal(debt: Debt) {
+  function handleOpenEdit(debt: Debt) {
     setEditingDebt(debt)
     setEditForm({
       name: debt.name,
@@ -180,118 +333,143 @@ export default function DebtsPage() {
       amount: String(debt.amount),
       remaining: String(debt.remaining),
       interestRate: String(debt.interestRate ?? 0),
-      isRecurring: Boolean(debt.isRecurring),
+      isRecurring: debt.isRecurring,
       paymentDate: debt.paymentDate ? String(debt.paymentDate) : '',
       paymentAmount: debt.paymentAmount ? String(debt.paymentAmount) : '',
-      deadline: debt.deadline ? new Date(debt.deadline).toISOString().slice(0, 10) : '',
+      deadline: debt.deadline ? debt.deadline.slice(0, 10) : '',
       priority: debt.priority,
       description: debt.description || '',
     })
     setEditSheetOpen(true)
   }
 
-  async function handleEditDebt(e: React.FormEvent) {
+  async function handleSaveEdit(e: React.FormEvent) {
     e.preventDefault()
     if (!editingDebt) return
-    setFormLoading(true)
+    setLoading(true)
     try {
-      const body = {
+      const payload: any = {
         name: editForm.name,
         type: editForm.type,
         amount: parseFloat(editForm.amount),
-        remaining: parseFloat(editForm.remaining || editForm.amount),
-        interestRate: parseFloat(editForm.interestRate || '0'),
+        remaining: parseFloat(editForm.remaining),
+        interestRate: parseFloat(editForm.interestRate) || 0,
         isRecurring: editForm.isRecurring,
-        paymentDate: editForm.isRecurring && editForm.paymentDate ? parseInt(editForm.paymentDate) : null,
-        paymentAmount: editForm.isRecurring && editForm.paymentAmount ? parseFloat(editForm.paymentAmount) : null,
-        deadline: !editForm.isRecurring && editForm.deadline ? editForm.deadline : null,
         priority: editForm.priority,
         description: editForm.description || null,
+        deadline: editForm.deadline ? editForm.deadline : null,
+      }
+      if (editForm.isRecurring) {
+        payload.paymentDate = parseInt(editForm.paymentDate, 10)
+        payload.paymentAmount = parseFloat(editForm.paymentAmount)
+      } else {
+        payload.paymentDate = null
+        payload.paymentAmount = null
       }
 
       await fetch(`/api/debts/${editingDebt.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       })
 
-      setEditingDebt(null)
       setEditSheetOpen(false)
+      setEditingDebt(null)
       loadData()
-    } catch (e) {
-      console.error(e)
     } finally {
-      setFormLoading(false)
+      setLoading(false)
     }
   }
 
-  async function handlePayDebt(e: React.FormEvent) {
+  async function handleRecordPayment(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedDebt) return
-    setFormLoading(true)
+    setLoading(true)
     try {
       await fetch(`/api/debts/${selectedDebt.id}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: parseFloat(payForm.amount),
-          accountId: payForm.accountId || undefined,
+          amount: parseFloat(paymentAmount),
+          paidDate: paymentDate,
+          accountId: paymentAccountId || undefined,
         }),
       })
-
-      setPayForm({ amount: '', accountId: '' })
-      setSelectedDebt(null)
       setPaySheetOpen(false)
+      setSelectedDebt(null)
+      setPaymentAmount('')
+      setPaymentAccountId('')
       loadData()
-    } catch (e) {
-      console.error(e)
     } finally {
-      setFormLoading(false)
+      setLoading(false)
     }
   }
 
   async function handleDeleteDebt(id: string) {
     if (!confirm('Are you sure you want to delete this debt?')) return
+    await fetch(`/api/debts/${id}`, { method: 'DELETE' })
+    loadData()
+  }
+
+  // Handlers for Upcoming Dues Payments
+  async function handlePayRecurringUpcoming(id: string) {
+    setPayingId(id)
+    await fetch(`/api/recurring/${id}/pay`, { method: 'POST' })
+    loadUpcoming()
+    loadData()
+    setPayingId(null)
+  }
+
+  function handleOpenPayModalUpcoming(item: UpcomingItem) {
+    setPayModalItem(item)
+    setPayModalAmount(String(item.amount))
+    setPayModalAccountId(item.accountId || '')
+  }
+
+  async function handleExecutePayUpcoming(e: React.FormEvent) {
+    e.preventDefault()
+    if (!payModalItem) return
+    setPayModalLoading(true)
     try {
-      await fetch(`/api/debts/${id}`, { method: 'DELETE' })
+      if (payModalItem.source === 'CREDIT_CARD') {
+        await fetch(`/api/credit-cards/${payModalItem.sourceId}/pay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: parseFloat(payModalAmount),
+            accountId: payModalAccountId || undefined,
+          }),
+        })
+      } else if (payModalItem.source === 'DEBT') {
+        await fetch(`/api/debts/${payModalItem.sourceId}/pay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: parseFloat(payModalAmount),
+            accountId: payModalAccountId || undefined,
+          }),
+        })
+      }
+      setPayModalItem(null)
+      loadUpcoming()
       loadData()
-    } catch (e) {
-      console.error(e)
+    } finally {
+      setPayModalLoading(false)
     }
   }
 
-  // Calculate Metrics
-  const totalOutstanding = debts.reduce((sum, d) => sum + Number(d.remaining), 0)
-
-  // Payments made in current calendar month
-  const now = new Date()
-  const currentMonth = now.getMonth()
-  const currentYear = now.getFullYear()
-
   const allPayments = debts.flatMap((d) =>
-    d.payments.map((p) => ({
+    (d.payments || []).map((p) => ({
       ...p,
       debtName: d.name,
       debtType: d.type,
     }))
   )
 
-  const monthlyExpenditure = allPayments
-    .filter((p) => {
-      const d = new Date(p.paidDate)
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear
-    })
-    .reduce((sum, p) => sum + Number(p.amount), 0)
-
-  const upcomingScheduledDues = debts
-    .filter((d) => d.isRecurring && d.remaining > 0 && d.paymentAmount)
-    .reduce((sum, d) => sum + Number(d.paymentAmount || 0), 0)
-
   const sortedHistory = allPayments.sort(
     (a, b) => new Date(b.paidDate).getTime() - new Date(a.paidDate).getTime()
   )
 
-  // Filter & Sort Debts
   const filteredDebts = debts.filter((d) => {
     if (typeFilter === 'ALL') return true
     return d.type === typeFilter
@@ -306,7 +484,6 @@ export default function DebtsPage() {
       return Number(b.remaining) - Number(a.remaining)
     }
     if (sortBy === 'date') {
-      // Prioritize debts with upcoming due day / deadline
       const getDateVal = (d: Debt) => {
         if (d.isRecurring && d.paymentDate) {
           const now = new Date()
@@ -322,55 +499,89 @@ export default function DebtsPage() {
     if (sortBy === 'amount') {
       return Number(b.remaining) - Number(a.remaining)
     }
-    // 'created'
     return (b as any).id > (a as any).id ? 1 : -1
   })
+
+  const filteredUpcomingItems = upcomingFilter === 'ALL'
+    ? upcomingItems
+    : upcomingItems.filter(item => item.source === upcomingFilter)
 
   return (
     <div className="pb-4">
       {/* Tab Selectors */}
-      <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide">
-        {(['active', 'history'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={cn(
-              'px-4 py-2 rounded-full text-sm font-medium flex-shrink-0 transition-colors',
-              tab === t
-                ? 'bg-primary text-white'
-                : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
-            )}
-          >
-            {t === 'active' ? 'Active Debts' : 'Payment History'}
-          </button>
-        ))}
+      <div className="flex gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-border dark:border-gray-800 overflow-x-auto scrollbar-hide">
+        <button
+          onClick={() => setTab('active')}
+          className={cn(
+            'px-4 py-2 rounded-full text-sm font-medium flex-shrink-0 transition-all',
+            tab === 'active'
+              ? 'bg-primary text-white shadow-sm'
+              : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+          )}
+        >
+          Debts & Liabilities
+        </button>
+        <button
+          onClick={() => setTab('upcoming')}
+          className={cn(
+            'px-4 py-2 rounded-full text-sm font-medium flex-shrink-0 transition-all',
+            tab === 'upcoming'
+              ? 'bg-primary text-white shadow-sm'
+              : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+          )}
+        >
+          Upcoming Dues & Bills
+        </button>
+        <button
+          onClick={() => setTab('history')}
+          className={cn(
+            'px-4 py-2 rounded-full text-sm font-medium flex-shrink-0 transition-all',
+            tab === 'history'
+              ? 'bg-primary text-white shadow-sm'
+              : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+          )}
+        >
+          Payment History
+        </button>
       </div>
 
-      {/* Analytics Card */}
-      <div className="px-4 mb-4">
-        <Card className="p-5 bg-gradient-to-br from-primary to-primary-hover text-white">
-          <p className="text-sm text-white/70 mb-1">Total Outstanding Debt</p>
-          <p className="text-3xl font-bold tracking-tight mb-4 tabular-nums">
-            {formatCurrency(totalOutstanding)}
-          </p>
-          <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-4">
+      {/* Aggregated Total Debt Overview Card */}
+      <div className="px-4 mt-3 mb-4">
+        <Card className="p-4 bg-gradient-to-br from-primary to-primary-hover text-white shadow-md border-0">
+          <div className="flex justify-between items-start mb-3">
             <div>
-              <p className="text-xs text-white/60 mb-0.5">This Month's Payments</p>
-              <p className="text-sm font-semibold tabular-nums">
-                {formatCurrency(monthlyExpenditure)}
-              </p>
+              <p className="text-xs text-white/70 font-medium">Total Outstanding Debt (All Liabilities)</p>
+              <h3 className="text-2xl font-bold tracking-tight tabular-nums mt-0.5">
+                {formatCurrency(totalAggregatedDebt)}
+              </h3>
             </div>
-            <div>
-              <p className="text-xs text-white/60 mb-0.5">Upcoming Dues (Month)</p>
-              <p className="text-sm font-semibold tabular-nums">
-                {formatCurrency(upcomingScheduledDues)}
-              </p>
+            <div className="text-right">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white/20 text-white backdrop-blur-sm">
+                {debts.length} active {debts.length === 1 ? 'debt' : 'debts'}
+              </span>
+            </div>
+          </div>
+
+          {/* Aggregated Debt Breakdown Mini Cards */}
+          <div className="grid grid-cols-3 gap-2 pt-3 border-t border-white/15 text-center">
+            <div className="bg-white/10 rounded-xl p-2">
+              <p className="text-[10px] text-white/70">Personal Debts</p>
+              <p className="text-xs font-bold tabular-nums mt-0.5">{formatCurrency(personalDebtsTotal)}</p>
+            </div>
+            <div className="bg-white/10 rounded-xl p-2">
+              <p className="text-[10px] text-white/70">Cards & PayLater</p>
+              <p className="text-xs font-bold tabular-nums mt-0.5">{formatCurrency(creditCardsTotal)}</p>
+            </div>
+            <div className="bg-white/10 rounded-xl p-2">
+              <p className="text-[10px] text-white/70">Loans & EMIs</p>
+              <p className="text-xs font-bold tabular-nums mt-0.5">{formatCurrency(loansRemainingTotal)}</p>
             </div>
           </div>
         </Card>
       </div>
 
-      {tab === 'active' ? (
+      {/* TAB 1: ACTIVE DEBTS & LIABILITIES */}
+      {tab === 'active' && (
         <div className="px-4 space-y-4">
           {/* Type Filter Tabs */}
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
@@ -385,24 +596,27 @@ export default function DebtsPage() {
             >
               All ({debts.length})
             </button>
-            {(['PERSONAL', 'LOAN', 'CREDIT_LINE', 'PAY_LATER'] as const).map((type) => {
-              const count = debts.filter((d) => d.type === type).length
-              return (
-                <button
-                  key={type}
-                  onClick={() => setTypeFilter(type)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border',
-                    typeFilter === type
-                      ? 'bg-primary text-white border-primary shadow-sm'
-                      : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
-                  )}
-                >
-                  {TYPE_LABELS[type]} ({count})
-                </button>
-              )
-            })}
+            {(['PERSONAL', 'LOAN', 'CREDIT_LINE', 'PAY_LATER'] as const)
+              .filter((t) => debts.some((d) => d.type === t))
+              .map((t) => {
+                const count = debts.filter((d) => d.type === t).length
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setTypeFilter(t)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border',
+                      typeFilter === t
+                        ? 'bg-primary text-white border-primary shadow-sm'
+                        : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                    )}
+                  >
+                    {TYPE_LABELS[t]} ({count})
+                  </button>
+                )
+              })}
           </div>
+
 
           {/* Sort By Controls */}
           <div className="flex items-center justify-between gap-2 px-1 bg-surface-offset/50 dark:bg-gray-800/40 p-2 rounded-xl">
@@ -430,204 +644,429 @@ export default function DebtsPage() {
             </div>
           </div>
 
-
           {loading ? (
             <p className="text-center text-gray-400 py-8">Loading debts...</p>
           ) : sortedDebts.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <Landmark className="mx-auto h-12 w-12 text-gray-500 mb-2" />
-              <p className="text-lg font-medium">No debts found</p>
-              <p className="text-sm">No debts match the selected type filter.</p>
-            </div>
+            <Card className="p-8 text-center text-gray-400 dark:text-gray-500">
+              <Landmark className="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600 mb-2" />
+              <p className="text-base font-semibold dark:text-gray-300">
+                {typeFilter === 'ALL' ? 'No active debts found' : `No ${TYPE_LABELS[typeFilter]} debts found`}
+              </p>
+              <p className="text-xs mt-1">Tap + below to add your first record</p>
+            </Card>
           ) : (
-            sortedDebts.map((debt) => {
+            <div className="space-y-3">
+              {sortedDebts.map((debt) => {
+                const paidAmount = Number(debt.amount) - Number(debt.remaining)
+                const pct = Math.min(100, Math.round((paidAmount / Number(debt.amount)) * 100))
 
-              const paidAmount = Number(debt.amount) - Number(debt.remaining)
-              const pct = (paidAmount / Number(debt.amount)) * 100
-
-              return (
-                <Card key={debt.id} className="p-4 space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold dark:text-white">{debt.name}</span>
-                        <Badge
-                          style={{
-                            backgroundColor: TYPE_COLORS[debt.type] + '15',
-                            color: TYPE_COLORS[debt.type],
-                          }}
-                        >
-                          {TYPE_LABELS[debt.type]}
-                        </Badge>
-                      </div>
-                      {debt.description && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {debt.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold dark:text-white tabular-nums">
-                        {formatCurrency(Number(debt.remaining))}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        of {formatCurrency(Number(debt.amount))}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div>
-                    <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${pct}%`,
-                          backgroundColor: TYPE_COLORS[debt.type] || '#10b981',
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>{pct.toFixed(0)}% Paid</span>
-                      {debt.interestRate > 0 && <span>{debt.interestRate}% Interest</span>}
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center pt-2 border-t border-border dark:border-gray-800">
-                    <div className="text-xs text-gray-400 space-y-0.5">
-                      {debt.isRecurring ? (
-                        <p className="flex items-center gap-1">
-                          <Calendar size={13} />
-                          EMI: {formatCurrency(Number(debt.paymentAmount || 0))} on {debt.paymentDate}th
-                        </p>
-                      ) : (
-                        <>
-                          {debt.deadline && (
-                            <p className="flex items-center gap-1">
-                              <Calendar size={13} />
-                              Payoff by: {new Date(debt.deadline).toLocaleDateString('en-IN', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric',
-                              })}
-                            </p>
-                          )}
-                          <p className="flex items-center gap-1">
-                            <AlertCircle size={13} />
-                            Priority:{' '}
-                            <span style={{ color: PRIORITY_COLORS[debt.priority] }}>
-                              {debt.priority}
-                            </span>
+                return (
+                  <Card key={debt.id} className="p-4 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-base dark:text-white">{debt.name}</p>
+                          <Badge
+                            style={{
+                              backgroundColor: (TYPE_COLORS[debt.type] || '#6b7280') + '20',
+                              color: TYPE_COLORS[debt.type] || '#6b7280',
+                            }}
+                          >
+                            {TYPE_LABELS[debt.type]}
+                          </Badge>
+                          <Badge
+                            style={{
+                              backgroundColor: (PRIORITY_COLORS[debt.priority] || '#10b981') + '20',
+                              color: PRIORITY_COLORS[debt.priority] || '#10b981',
+                            }}
+                          >
+                            {debt.priority}
+                          </Badge>
+                        </div>
+                        {debt.description && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {debt.description}
                           </p>
-                        </>
-                      )}
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold tabular-nums text-danger">
+                          {formatCurrency(debt.remaining)}
+                        </p>
+                        <p className="text-xs text-gray-400">of {formatCurrency(debt.amount)}</p>
+                      </div>
                     </div>
 
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openEditDebtModal(debt)}
-                        className="text-gray-600 dark:text-gray-300 hover:bg-surface-offset dark:hover:bg-gray-800"
-                        title="Edit Debt"
-                      >
-                        <Edit2 size={14} />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDeleteDebt(debt.id)}
-                        className="text-danger border-danger/30 hover:bg-danger/10"
-                        title="Delete Debt"
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setSelectedDebt(debt)
-                          setPayForm({
-                            amount: String(debt.isRecurring ? debt.paymentAmount || '' : ''),
-                            accountId: '',
-                          })
-                          setPaySheetOpen(true)
-                        }}
-                      >
-                        Pay
-                      </Button>
+                    <div>
+                      <ProgressBar value={pct} max={100} className="mb-1.5" />
+                      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                        <span>{pct}% paid off</span>
+                        <span>{formatCurrency(paidAmount)} paid</span>
+                      </div>
                     </div>
-                  </div>
-                </Card>
-              )
-            })
+
+                    {debt.interestRate > 0 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Interest Rate: <span className="font-medium">{debt.interestRate}%</span>
+                      </p>
+                    )}
+
+                    <div className="flex justify-between items-center pt-2 border-t border-border dark:border-gray-800">
+                      <div className="text-xs text-gray-400">
+                        {debt.isRecurring && debt.paymentDate ? (
+                          <span>Due day {debt.paymentDate} monthly</span>
+                        ) : debt.deadline ? (
+                          <span>Target: {new Date(debt.deadline).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                        ) : (
+                          <span>No deadline set</span>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenEdit(debt)}
+                          className="px-2 py-1 min-h-[32px] text-gray-600 dark:text-gray-300"
+                          title="Edit Debt"
+                        >
+                          <Edit2 size={13} />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDeleteDebt(debt.id)}
+                          className="px-2 py-1 min-h-[32px] text-danger border-danger/30 hover:bg-danger/10"
+                          title="Delete Debt"
+                        >
+                          <Trash2 size={13} />
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSelectedDebt(debt)
+                            setPaymentAmount(
+                              debt.paymentAmount
+                                ? String(debt.paymentAmount)
+                                : String(debt.remaining)
+                            )
+                            setPaySheetOpen(true)
+                          }}
+                          className="gap-1 text-xs py-1 px-3 min-h-[32px]"
+                        >
+                          <CheckCircle size={13} /> Pay
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+
+          <FAB onClick={() => setAddSheetOpen(true)} />
+        </div>
+      )}
+
+      {/* TAB 2: UPCOMING DUES & BILLS */}
+      {tab === 'upcoming' && (
+        <div className="px-4 space-y-4">
+          {/* Timeframe Selector */}
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
+            {[
+              { id: 'thisMonth', label: 'This Month' },
+              { id: 'next7Days', label: 'Next 7 Days' },
+              { id: 'next30Days', label: 'Next 30 Days' },
+              { id: 'nextMonth', label: 'Next Month' },
+              { id: 'custom', label: 'Custom Range' },
+            ].map(tf => (
+              <button
+                key={tf.id}
+                onClick={() => setUpcomingTimeframe(tf.id as any)}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all',
+                  upcomingTimeframe === tf.id
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                )}
+              >
+                {tf.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom Date Range */}
+          {upcomingTimeframe === 'custom' && (
+            <Card className="p-3 bg-surface-offset dark:bg-gray-800/40 grid grid-cols-2 gap-3 border-dashed">
+              <DatePicker
+                label="Start Date"
+                name="customStart"
+                value={customRange.startDate}
+                onChange={(e) => setCustomRange(p => ({ ...p, startDate: e.target.value }))}
+              />
+              <DatePicker
+                label="End Date"
+                name="customEnd"
+                value={customRange.endDate}
+                onChange={(e) => setCustomRange(p => ({ ...p, endDate: e.target.value }))}
+              />
+            </Card>
+          )}
+
+          {/* Upcoming Summary Card */}
+          <Card className="p-4 bg-surface-offset dark:bg-gray-800/60 border">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                Scheduled Dues for Period
+              </span>
+              <span className="text-xs font-bold text-danger tabular-nums">
+                {formatCurrency(upcomingSummary.total)}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs text-gray-400">
+              <span>{upcomingSummary.totalCount} upcoming dues</span>
+              {upcomingSummary.overdueCount > 0 && (
+                <span className="text-danger font-semibold flex items-center gap-1">
+                  <AlertCircle size={12} /> {upcomingSummary.overdueCount} overdue
+                </span>
+              )}
+            </div>
+          </Card>
+
+          {/* Type Filter Tabs */}
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
+            <button
+              onClick={() => setUpcomingFilter('ALL')}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border',
+                upcomingFilter === 'ALL'
+                  ? 'bg-primary text-white border-primary shadow-sm'
+                  : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
+              )}
+            >
+              All ({upcomingItems.length})
+            </button>
+            {upcomingItems.some(i => i.source === 'CREDIT_CARD') && (
+              <button
+                onClick={() => setUpcomingFilter('CREDIT_CARD')}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border flex items-center gap-1.5',
+                  upcomingFilter === 'CREDIT_CARD'
+                    ? 'bg-primary text-white border-primary shadow-sm'
+                    : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                )}
+              >
+                <CreditCard size={13} /> Cards ({upcomingItems.filter(i => i.source === 'CREDIT_CARD').length})
+              </button>
+            )}
+            {upcomingItems.some(i => i.source === 'RECURRING') && (
+              <button
+                onClick={() => setUpcomingFilter('RECURRING')}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border flex items-center gap-1.5',
+                  upcomingFilter === 'RECURRING'
+                    ? 'bg-primary text-white border-primary shadow-sm'
+                    : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                )}
+              >
+                <RefreshCw size={13} /> Recurring ({upcomingItems.filter(i => i.source === 'RECURRING').length})
+              </button>
+            )}
+            {upcomingItems.some(i => i.source === 'DEBT') && (
+              <button
+                onClick={() => setUpcomingFilter('DEBT')}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border flex items-center gap-1.5',
+                  upcomingFilter === 'DEBT'
+                    ? 'bg-primary text-white border-primary shadow-sm'
+                    : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                )}
+              >
+                <Landmark size={13} /> Debts ({upcomingItems.filter(i => i.source === 'DEBT').length})
+              </button>
+            )}
+          </div>
+
+
+          {/* Dues List */}
+          {upcomingLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : filteredUpcomingItems.length === 0 ? (
+            <Card className="p-8 text-center text-gray-400 dark:text-gray-500">
+              <Calendar className="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600 mb-2" />
+              <p className="text-base font-semibold dark:text-gray-300">No upcoming dues found</p>
+              <p className="text-xs mt-1">
+                You're all clear for this timeframe or all upcoming bills are settled.
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {filteredUpcomingItems.map(item => {
+                const dateObj = new Date(item.dueDate)
+                const dateFormatted = dateObj.toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: dateObj.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
+                })
+
+                return (
+                  <Card key={item.id} className="p-4 space-y-3 relative overflow-hidden">
+                    <div
+                      className={cn(
+                        'absolute top-0 left-0 bottom-0 w-1',
+                        item.isOverdue
+                          ? 'bg-danger'
+                          : item.daysLeft <= 3
+                          ? 'bg-amber-500'
+                          : 'bg-primary'
+                      )}
+                    />
+
+                    <div className="flex justify-between items-start pl-1.5">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold dark:text-white text-sm">{item.name}</p>
+                          <Badge
+                            className={cn(
+                              'text-[10px] px-1.5 py-0.5',
+                              item.source === 'CREDIT_CARD' && 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+                              item.source === 'RECURRING' && 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
+                              item.source === 'DEBT' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            )}
+                          >
+                            {item.typeLabel}
+                          </Badge>
+                        </div>
+
+                        <p className="text-xs text-gray-400 flex items-center gap-1">
+                          <Calendar size={12} />
+                          Due: <span className="font-medium text-gray-600 dark:text-gray-300">{dateFormatted}</span>
+                          {item.accountName && <span>· From: {item.accountName}</span>}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-lg font-bold tabular-nums text-danger">
+                          {formatCurrency(item.amount)}
+                        </p>
+                        {item.source === 'CREDIT_CARD' && item.remainingTotal && item.remainingTotal !== item.amount ? (
+                          <p className="text-[10px] text-gray-400">Total: {formatCurrency(item.remainingTotal)}</p>
+                        ) : item.minimumAmount && item.minimumAmount > 0 && item.minimumAmount !== item.amount ? (
+                          <p className="text-[10px] text-gray-400">Min: {formatCurrency(item.minimumAmount)}</p>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2 border-t border-border dark:border-gray-800 pl-1.5">
+                      <div className="text-xs">
+                        {item.isOverdue ? (
+                          <span className="text-danger font-semibold flex items-center gap-1">
+                            <AlertCircle size={13} /> Overdue by {Math.abs(item.daysLeft)} days
+                          </span>
+                        ) : item.daysLeft === 0 ? (
+                          <span className="text-amber-500 font-semibold flex items-center gap-1">
+                            <AlertCircle size={13} /> Due Today!
+                          </span>
+                        ) : item.daysLeft === 1 ? (
+                          <span className="text-amber-500 font-medium">Due Tomorrow</span>
+                        ) : (
+                          <span className="text-gray-400">In {item.daysLeft} days</span>
+                        )}
+                        {item.paidCount !== undefined && item.totalCount && (
+                          <span className="text-gray-400 ml-2">
+                            ({item.paidCount}/{item.totalCount} paid)
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        {item.source === 'RECURRING' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handlePayRecurringUpcoming(item.sourceId)}
+                            loading={payingId === item.sourceId}
+                            className="gap-1 text-xs py-1 px-3 min-h-[32px]"
+                          >
+                            <CheckCircle size={13} /> Mark Paid
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenPayModalUpcoming(item)}
+                            className="gap-1 text-xs py-1 px-3 min-h-[32px]"
+                          >
+                            Pay / Clear
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
           )}
         </div>
-      ) : (
+      )}
+
+      {/* TAB 3: PAYMENT HISTORY */}
+      {tab === 'history' && (
         <div className="px-4">
-          <Card className="divide-y divide-border dark:divide-gray-800">
-            {sortedHistory.length === 0 ? (
-              <p className="text-center py-8 text-gray-400 text-sm">No payment history found</p>
-            ) : (
-              sortedHistory.map((payment) => (
-                <div key={payment.id} className="flex items-center justify-between p-4">
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-semibold dark:text-white">{payment.debtName}</p>
+          {sortedHistory.length === 0 ? (
+            <Card className="p-8 text-center text-gray-400 dark:text-gray-500">
+              <Calendar className="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600 mb-2" />
+              <p className="text-base font-semibold dark:text-gray-300">No payment history yet</p>
+              <p className="text-xs mt-1">Payments made will appear here chronologically</p>
+            </Card>
+          ) : (
+            <Card className="divide-y divide-border dark:divide-gray-800">
+              {sortedHistory.map((p) => (
+                <div key={p.id} className="flex justify-between items-center p-4">
+                  <div>
+                    <p className="font-semibold text-sm dark:text-white">{p.debtName}</p>
                     <p className="text-xs text-gray-400">
-                      {new Date(payment.paidDate).toLocaleDateString('en-IN', {
+                      {new Date(p.paidDate).toLocaleDateString('en-IN', {
                         day: 'numeric',
                         month: 'short',
                         year: 'numeric',
                       })}
+                      {p.debtType && ` · ${TYPE_LABELS[p.debtType]}`}
                     </p>
                   </div>
-                  <span className="text-sm font-bold text-success tabular-nums">
-                    +{formatCurrency(Number(payment.amount))}
-                  </span>
+                  <p className="font-bold text-success tabular-nums">
+                    +{formatCurrency(p.amount)}
+                  </p>
                 </div>
-              ))
-            )}
-          </Card>
+              ))}
+            </Card>
+          )}
         </div>
       )}
 
-      {/* Floating Action Button for Add Debt */}
-      <FAB onClick={() => setAddSheetOpen(true)} />
-
       {/* Add Debt Sheet */}
-      <Sheet open={addSheetOpen} onClose={() => setAddSheetOpen(false)} title="Add Debt Details">
+      <Sheet open={addSheetOpen} onClose={() => setAddSheetOpen(false)} title="Add Debt / Liability">
         <form onSubmit={handleAddDebt} className="space-y-4 pb-6">
           <Input
-            label="Name / Creditor"
+            label="Name / Title"
             value={debtForm.name}
             onChange={(e) => setDebtForm((p) => ({ ...p, name: e.target.value }))}
-            placeholder="e.g. Personal loan from friend"
+            placeholder="e.g. Loan from Rahul, Car Loan"
             required
           />
 
-          <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="Type"
-              value={debtForm.type}
-              onChange={(e) =>
-                setDebtForm((p) => ({ ...p, type: e.target.value as Debt['type'] }))
-              }
-            >
-              {Object.entries(TYPE_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </Select>
-
-            <Input
-              label="Interest Rate (%)"
-              type="number"
-              step="0.01"
-              value={debtForm.interestRate}
-              onChange={(e) => setDebtForm((p) => ({ ...p, interestRate: e.target.value }))}
-              placeholder="e.g. 10.5"
-            />
-          </div>
+          <Select
+            label="Type"
+            value={debtForm.type}
+            onChange={(e) => setDebtForm((p) => ({ ...p, type: e.target.value as any }))}
+          >
+            {Object.entries(TYPE_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </Select>
 
           <div className="grid grid-cols-2 gap-3">
             <Input
@@ -638,36 +1077,33 @@ export default function DebtsPage() {
               placeholder="0.00"
               required
             />
-            <Select
-              label="Priority"
-              value={debtForm.priority}
-              onChange={(e) =>
-                setDebtForm((p) => ({ ...p, priority: e.target.value as Debt['priority'] }))
-              }
-            >
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-            </Select>
+            <Input
+              label="Interest Rate % (Annual)"
+              type="number"
+              step="0.01"
+              value={debtForm.interestRate}
+              onChange={(e) => setDebtForm((p) => ({ ...p, interestRate: e.target.value }))}
+              placeholder="0"
+            />
           </div>
 
-          <div className="flex items-center gap-2 py-1">
+          <div className="flex items-center gap-2 pt-1 pb-1">
             <input
               type="checkbox"
               id="isRecurring"
               checked={debtForm.isRecurring}
               onChange={(e) => setDebtForm((p) => ({ ...p, isRecurring: e.target.checked }))}
-              className="rounded text-primary focus:ring-primary h-4 w-4"
+              className="w-4 h-4 text-primary rounded-md border-border dark:border-gray-700"
             />
-            <label htmlFor="isRecurring" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              This has recurring/installment payments
+            <label htmlFor="isRecurring" className="text-sm font-medium dark:text-gray-200">
+              Recurring Monthly Payment / EMI
             </label>
           </div>
 
           {debtForm.isRecurring ? (
-            <div className="grid grid-cols-2 gap-3 p-3 bg-surface-offset dark:bg-gray-800/50 rounded-xl">
+            <div className="grid grid-cols-2 gap-3">
               <Input
-                label="Monthly Due Day"
+                label="Monthly Due Day (1-31)"
                 type="number"
                 min="1"
                 max="31"
@@ -677,7 +1113,7 @@ export default function DebtsPage() {
                 required
               />
               <Input
-                label="Monthly EMI Amount"
+                label="Monthly Amount"
                 type="number"
                 value={debtForm.paymentAmount}
                 onChange={(e) => setDebtForm((p) => ({ ...p, paymentAmount: e.target.value }))}
@@ -687,65 +1123,62 @@ export default function DebtsPage() {
             </div>
           ) : (
             <DatePicker
-              label="Payoff Deadline"
+              label="Target Payoff Deadline (Optional)"
               name="deadline"
               value={debtForm.deadline}
               onChange={(e) => setDebtForm((p) => ({ ...p, deadline: e.target.value }))}
             />
           )}
 
+          <Select
+            label="Priority Level"
+            value={debtForm.priority}
+            onChange={(e) => setDebtForm((p) => ({ ...p, priority: e.target.value as any }))}
+          >
+            <option value="LOW">Low Priority</option>
+            <option value="MEDIUM">Medium Priority</option>
+            <option value="HIGH">High Priority (Urgent)</option>
+          </Select>
+
           <Input
-            label="Description / Note"
+            label="Notes / Description (Optional)"
             value={debtForm.description}
             onChange={(e) => setDebtForm((p) => ({ ...p, description: e.target.value }))}
-            placeholder="Optional notes"
+            placeholder="Add any context..."
           />
 
-          <Button type="submit" size="lg" loading={formLoading}>
+          <Button type="submit" size="lg" loading={loading}>
             Add Debt
           </Button>
         </form>
       </Sheet>
 
       {/* Edit Debt Sheet */}
-      <Sheet open={editSheetOpen} onClose={() => { setEditSheetOpen(false); setEditingDebt(null); }} title="Edit Debt Details">
-        <form onSubmit={handleEditDebt} className="space-y-4 pb-6">
+      <Sheet open={editSheetOpen} onClose={() => setEditSheetOpen(false)} title="Edit Debt / Liability">
+        <form onSubmit={handleSaveEdit} className="space-y-4 pb-6">
           <Input
-            label="Name / Creditor"
+            label="Name / Title"
             value={editForm.name}
             onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
-            placeholder="e.g. Personal loan from friend"
+            placeholder="e.g. Loan from Rahul, Car Loan"
             required
           />
 
-          <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="Type"
-              value={editForm.type}
-              onChange={(e) =>
-                setEditForm((p) => ({ ...p, type: e.target.value as Debt['type'] }))
-              }
-            >
-              {Object.entries(TYPE_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </Select>
-
-            <Input
-              label="Interest Rate (%)"
-              type="number"
-              step="0.01"
-              value={editForm.interestRate}
-              onChange={(e) => setEditForm((p) => ({ ...p, interestRate: e.target.value }))}
-              placeholder="e.g. 10.5"
-            />
-          </div>
+          <Select
+            label="Type"
+            value={editForm.type}
+            onChange={(e) => setEditForm((p) => ({ ...p, type: e.target.value as any }))}
+          >
+            {Object.entries(TYPE_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </Select>
 
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Total Debt Amount"
+              label="Total Principal Amount"
               type="number"
               value={editForm.amount}
               onChange={(e) => setEditForm((p) => ({ ...p, amount: e.target.value }))}
@@ -762,37 +1195,32 @@ export default function DebtsPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="Priority"
-              value={editForm.priority}
-              onChange={(e) =>
-                setEditForm((p) => ({ ...p, priority: e.target.value as Debt['priority'] }))
-              }
-            >
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-            </Select>
-          </div>
+          <Input
+            label="Interest Rate % (Annual)"
+            type="number"
+            step="0.01"
+            value={editForm.interestRate}
+            onChange={(e) => setEditForm((p) => ({ ...p, interestRate: e.target.value }))}
+            placeholder="0"
+          />
 
-          <div className="flex items-center gap-2 py-1">
+          <div className="flex items-center gap-2 pt-1 pb-1">
             <input
               type="checkbox"
               id="editIsRecurring"
               checked={editForm.isRecurring}
               onChange={(e) => setEditForm((p) => ({ ...p, isRecurring: e.target.checked }))}
-              className="rounded text-primary focus:ring-primary h-4 w-4"
+              className="w-4 h-4 text-primary rounded-md border-border dark:border-gray-700"
             />
-            <label htmlFor="editIsRecurring" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              This has recurring/installment payments
+            <label htmlFor="editIsRecurring" className="text-sm font-medium dark:text-gray-200">
+              Recurring Monthly Payment / EMI
             </label>
           </div>
 
           {editForm.isRecurring ? (
-            <div className="grid grid-cols-2 gap-3 p-3 bg-surface-offset dark:bg-gray-800/50 rounded-xl">
+            <div className="grid grid-cols-2 gap-3">
               <Input
-                label="Monthly Due Day"
+                label="Monthly Due Day (1-31)"
                 type="number"
                 min="1"
                 max="31"
@@ -802,7 +1230,7 @@ export default function DebtsPage() {
                 required
               />
               <Input
-                label="Monthly EMI Amount"
+                label="Monthly Amount"
                 type="number"
                 value={editForm.paymentAmount}
                 onChange={(e) => setEditForm((p) => ({ ...p, paymentAmount: e.target.value }))}
@@ -812,64 +1240,129 @@ export default function DebtsPage() {
             </div>
           ) : (
             <DatePicker
-              label="Payoff Deadline"
+              label="Target Payoff Deadline (Optional)"
               name="editDeadline"
               value={editForm.deadline}
               onChange={(e) => setEditForm((p) => ({ ...p, deadline: e.target.value }))}
             />
           )}
 
+          <Select
+            label="Priority Level"
+            value={editForm.priority}
+            onChange={(e) => setEditForm((p) => ({ ...p, priority: e.target.value as any }))}
+          >
+            <option value="LOW">Low Priority</option>
+            <option value="MEDIUM">Medium Priority</option>
+            <option value="HIGH">High Priority (Urgent)</option>
+          </Select>
+
           <Input
-            label="Description / Note"
+            label="Notes / Description (Optional)"
             value={editForm.description}
             onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))}
-            placeholder="Optional notes"
+            placeholder="Add any context..."
           />
 
-          <Button type="submit" size="lg" loading={formLoading}>
+          <Button type="submit" size="lg" loading={loading}>
             Save Changes
           </Button>
         </form>
       </Sheet>
 
-      {/* Pay Debt Sheet */}
+      {/* Record Debt Payment Sheet */}
+      <Sheet open={paySheetOpen} onClose={() => setPaySheetOpen(false)} title="Record Debt Payment">
+        {selectedDebt && (
+          <form onSubmit={handleRecordPayment} className="space-y-4 pb-6">
+            <div className="p-3 bg-surface-offset dark:bg-gray-800/60 rounded-xl space-y-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Recording payment for</p>
+              <p className="font-bold text-base dark:text-white">{selectedDebt.name}</p>
+              <p className="text-xs text-danger font-semibold">
+                Remaining: {formatCurrency(selectedDebt.remaining)}
+              </p>
+            </div>
+
+            <Input
+              label="Payment Amount"
+              type="number"
+              step="any"
+              value={paymentAmount}
+              onChange={(e) => setPaymentAmount(e.target.value)}
+              placeholder="0.00"
+              required
+            />
+
+            <Select
+              label="Deduct From Account"
+              value={paymentAccountId}
+              onChange={(e) => setPaymentAccountId(e.target.value)}
+            >
+              <option value="">None (Paid externally / Cash)</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name}
+                </option>
+              ))}
+            </Select>
+
+            <DatePicker
+              label="Payment Date"
+              name="paymentDate"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              required
+            />
+
+            <Button type="submit" size="lg" loading={loading}>
+              Confirm & Record Payment
+            </Button>
+          </form>
+        )}
+      </Sheet>
+
+      {/* Quick Pay Modal for Upcoming Items */}
       <Sheet
-        open={paySheetOpen}
-        onClose={() => {
-          setSelectedDebt(null)
-          setPaySheetOpen(false)
-        }}
-        title={selectedDebt ? `Record Payment for ${selectedDebt.name}` : 'Record Payment'}
+        open={Boolean(payModalItem)}
+        onClose={() => setPayModalItem(null)}
+        title={payModalItem ? `Record Payment for ${payModalItem.name}` : 'Record Payment'}
       >
-        <form onSubmit={handlePayDebt} className="space-y-4 pb-6">
-          <Input
-            label="Payment Amount"
-            type="number"
-            value={payForm.amount}
-            onChange={(e) => setPayForm((p) => ({ ...p, amount: e.target.value }))}
-            placeholder="0.00"
-            required
-          />
+        {payModalItem && (
+          <form onSubmit={handleExecutePayUpcoming} className="space-y-4 pb-6">
+            <div className="p-3 bg-surface-offset dark:bg-gray-800/60 rounded-xl space-y-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400">{payModalItem.typeLabel}</p>
+              <p className="font-bold text-base dark:text-white">{payModalItem.name}</p>
+              <p className="text-xs text-danger font-semibold">Total Due: {formatCurrency(payModalItem.amount)}</p>
+            </div>
 
-          <Select
-            label="Deduct From Account"
-            value={payForm.accountId}
-            onChange={(e) => setPayForm((p) => ({ ...p, accountId: e.target.value }))}
-          >
-            <option value="">None (Outside Wallet / Cash)</option>
-            {accounts.map((acc) => (
-              <option key={acc.id} value={acc.id}>
-                {acc.name}
-              </option>
-            ))}
-          </Select>
+            <Input
+              label="Payment Amount"
+              type="number"
+              step="any"
+              value={payModalAmount}
+              onChange={(e) => setPayModalAmount(e.target.value)}
+              placeholder="0.00"
+              required
+            />
 
-          <Button type="submit" size="lg" loading={formLoading}>
-            Record Payment
-          </Button>
-        </form>
+            <Select
+              label="Deduct From Account"
+              value={payModalAccountId}
+              onChange={(e) => setPayModalAccountId(e.target.value)}
+            >
+              <option value="">None (Paid from outside / Cash)</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name}
+                </option>
+              ))}
+            </Select>
+
+            <Button type="submit" size="lg" loading={payModalLoading}>
+              Confirm & Record Payment
+            </Button>
+          </form>
+        )}
       </Sheet>
     </div>
   )
 }
-
