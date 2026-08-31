@@ -4,8 +4,8 @@ FROM node:20-alpine AS base
 # Install openssl and other prisma dependencies
 RUN apk add --no-cache libc6-compat openssl
 
-# Install pnpm
-RUN npm install -g pnpm
+# Install pnpm (matching lockfile version 9)
+RUN npm install -g pnpm@9
 
 WORKDIR /app
 
