@@ -384,15 +384,15 @@ export default function ExpensesPage() {
             </div>
           </Card>
 
-          {/* Filter Pills */}
-          <div className="flex gap-2 items-center flex-wrap">
+          {/* Type Filter Tabs */}
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
             <button
               onClick={() => setUpcomingFilter('ALL')}
               className={cn(
-                'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border',
                 upcomingFilter === 'ALL'
-                  ? 'bg-primary text-white border-primary'
-                  : 'border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                  ? 'bg-primary text-white border-primary shadow-sm'
+                  : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
               )}
             >
               All ({upcomingItems.length})
@@ -400,37 +400,38 @@ export default function ExpensesPage() {
             <button
               onClick={() => setUpcomingFilter('CREDIT_CARD')}
               className={cn(
-                'px-3 py-1 rounded-full text-xs font-medium border flex items-center gap-1 transition-colors',
+                'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border flex items-center gap-1.5',
                 upcomingFilter === 'CREDIT_CARD'
-                  ? 'bg-primary text-white border-primary'
-                  : 'border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                  ? 'bg-primary text-white border-primary shadow-sm'
+                  : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
               )}
             >
-              <CreditCard size={12} /> Cards ({upcomingItems.filter(i => i.source === 'CREDIT_CARD').length})
+              <CreditCard size={13} /> Cards ({upcomingItems.filter(i => i.source === 'CREDIT_CARD').length})
             </button>
             <button
               onClick={() => setUpcomingFilter('RECURRING')}
               className={cn(
-                'px-3 py-1 rounded-full text-xs font-medium border flex items-center gap-1 transition-colors',
+                'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border flex items-center gap-1.5',
                 upcomingFilter === 'RECURRING'
-                  ? 'bg-primary text-white border-primary'
-                  : 'border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                  ? 'bg-primary text-white border-primary shadow-sm'
+                  : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
               )}
             >
-              <RefreshCw size={12} /> Recurring ({upcomingItems.filter(i => i.source === 'RECURRING').length})
+              <RefreshCw size={13} /> Recurring ({upcomingItems.filter(i => i.source === 'RECURRING').length})
             </button>
             <button
               onClick={() => setUpcomingFilter('DEBT')}
               className={cn(
-                'px-3 py-1 rounded-full text-xs font-medium border flex items-center gap-1 transition-colors',
+                'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border flex items-center gap-1.5',
                 upcomingFilter === 'DEBT'
-                  ? 'bg-primary text-white border-primary'
-                  : 'border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                  ? 'bg-primary text-white border-primary shadow-sm'
+                  : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
               )}
             >
-              <Landmark size={12} /> Debts ({upcomingItems.filter(i => i.source === 'DEBT').length})
+              <Landmark size={13} /> Debts ({upcomingItems.filter(i => i.source === 'DEBT').length})
             </button>
           </div>
+
 
           {/* Dues List */}
           {upcomingLoading ? (
@@ -496,10 +497,13 @@ export default function ExpensesPage() {
                         <p className="text-lg font-bold tabular-nums text-danger">
                           {formatCurrency(item.amount)}
                         </p>
-                        {item.minimumAmount && item.minimumAmount > 0 ? (
+                        {item.source === 'CREDIT_CARD' && item.remainingTotal && item.remainingTotal !== item.amount ? (
+                          <p className="text-[10px] text-gray-400">Total: {formatCurrency(item.remainingTotal)}</p>
+                        ) : item.minimumAmount && item.minimumAmount > 0 && item.minimumAmount !== item.amount ? (
                           <p className="text-[10px] text-gray-400">Min: {formatCurrency(item.minimumAmount)}</p>
                         ) : null}
                       </div>
+
                     </div>
 
                     <div className="flex justify-between items-center pt-2 border-t border-border dark:border-gray-800 pl-1.5">

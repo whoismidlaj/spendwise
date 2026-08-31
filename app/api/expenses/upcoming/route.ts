@@ -93,7 +93,11 @@ export async function GET(req: NextRequest) {
   // 1. Process Credit Cards
   for (const card of creditCards) {
     const dueAmount = Number(card.dueAmount)
-    if (dueAmount > 0) {
+    const minimumDue = Number(card.minimumDue)
+    if (dueAmount > 0 || minimumDue > 0) {
+      // If minimumDue > 0, use minimumDue as the primary bill amount, otherwise full dueAmount
+      const primaryAmount = minimumDue > 0 ? minimumDue : dueAmount
+
       for (const { year, month } of months) {
         const day = getValidDay(year, month, card.dueDate)
         const dueDate = new Date(year, month, day, 23, 59, 59, 999)
@@ -107,9 +111,10 @@ export async function GET(req: NextRequest) {
             sourceId: card.id,
             name: `${card.bank} ${card.name}`,
             source: 'CREDIT_CARD',
-            typeLabel: card.type === 'PAYLATER' ? 'Pay Later' : 'Credit Card Bill',
-            amount: dueAmount,
-            minimumAmount: Number(card.minimumDue) > 0 ? Number(card.minimumDue) : undefined,
+            typeLabel: card.type === 'PAYLATER' ? 'Pay Later' : (minimumDue > 0 ? 'Card Min Due' : 'Credit Card Bill'),
+            amount: primaryAmount,
+            minimumAmount: minimumDue > 0 ? minimumDue : undefined,
+            remainingTotal: dueAmount,
             dueDate: dueDate.toISOString(),
             dueDay: card.dueDate,
             daysLeft,
@@ -121,6 +126,7 @@ export async function GET(req: NextRequest) {
       }
     }
   }
+
 
   // 2. Process Recurring Expenses (EMIs, Subscriptions, Rent, Utilities, etc.)
   for (const item of recurringExpenses) {

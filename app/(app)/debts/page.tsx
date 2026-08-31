@@ -405,23 +405,23 @@ export default function DebtsPage() {
           </div>
 
           {/* Sort By Controls */}
-          <div className="flex items-center justify-between gap-2 px-1">
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Sort By:</span>
-            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+          <div className="flex items-center justify-between gap-2 px-1 bg-surface-offset/50 dark:bg-gray-800/40 p-2 rounded-xl">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">Sort:</span>
+            <div className="flex gap-1 overflow-x-auto scrollbar-hide flex-1 justify-end">
               {[
                 { id: 'priority', label: 'Priority' },
                 { id: 'date', label: 'Due Date' },
-                { id: 'amount', label: 'Highest Amount' },
-                { id: 'created', label: 'Latest Added' },
+                { id: 'amount', label: 'Amount' },
+                { id: 'created', label: 'Latest' },
               ].map((s) => (
                 <button
                   key={s.id}
                   onClick={() => setSortBy(s.id as any)}
                   className={cn(
-                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap',
                     sortBy === s.id
-                      ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary font-semibold'
-                      : 'text-gray-500 hover:bg-surface-offset dark:hover:bg-gray-800'
+                      ? 'bg-primary text-white shadow-xs font-semibold'
+                      : 'text-gray-600 dark:text-gray-300 hover:bg-surface-offset dark:hover:bg-gray-800'
                   )}
                 >
                   {s.label}
@@ -429,6 +429,7 @@ export default function DebtsPage() {
               ))}
             </div>
           </div>
+
 
           {loading ? (
             <p className="text-center text-gray-400 py-8">Loading debts...</p>
