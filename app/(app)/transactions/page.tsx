@@ -180,10 +180,17 @@ export default function TransactionsPage() {
         {editTx && (
           <TransactionForm
             onSuccess={() => { setEditTx(null); load() }}
-            initial={{ id: editTx.id, type: editTx.type as 'EXPENSE' | 'INCOME', amount: String(editTx.amount), name: editTx.name, date: editTx.date.slice(0, 10) }}
+            initial={{
+              id: editTx.id,
+              type: editTx.type as 'EXPENSE' | 'INCOME',
+              amount: String(editTx.amount),
+              name: editTx.name,
+              date: editTx.date,
+            }}
           />
         )}
       </Sheet>
     </div>
   )
 }
+

@@ -12,6 +12,7 @@ const schema = z.object({
   name: z.string().min(1, 'Name required'),
   description: z.string().optional(),
   date: z.string().min(1),
+  time: z.string().optional(),
   accountId: z.string().optional(),
   toAccountId: z.string().optional(),
   creditCardId: z.string().optional(),
@@ -25,12 +26,25 @@ interface TransactionFormProps {
   initial?: Partial<FormData> & { id?: string }
 }
 
+function getCurrentTimeStr(dateObj?: Date) {
+  const d = dateObj || new Date()
+  const hours = String(d.getHours()).padStart(2, '0')
+  const mins = String(d.getMinutes()).padStart(2, '0')
+  return `${hours}:${mins}`
+}
+
 export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([])
   const [cards, setCards] = useState<{ id: string; name: string }[]>([])
   const [categories, setCategories] = useState<{ id: string; name: string; icon: string; type: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [useCard, setUseCard] = useState(false)
+
+  const initialDateObj = initial?.date ? new Date(initial.date) : new Date()
+  const initialDateStr = initial?.date
+    ? (initial.date.includes('T') ? initial.date.slice(0, 10) : initial.date)
+    : new Date().toISOString().slice(0, 10)
+  const initialTimeStr = initial?.time || (initial?.date && initial.date.includes('T') ? getCurrentTimeStr(initialDateObj) : getCurrentTimeStr())
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -39,7 +53,8 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
       amount: initial?.amount ?? '',
       name: initial?.name ?? '',
       description: initial?.description ?? '',
-      date: initial?.date ?? new Date().toISOString().slice(0, 10),
+      date: initialDateStr,
+      time: initialTimeStr,
       accountId: initial?.accountId ?? '',
       toAccountId: initial?.toAccountId ?? '',
       categoryId: initial?.categoryId ?? '',
@@ -66,8 +81,21 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
 
   async function onSubmit(data: FormData) {
     setLoading(true)
+    
+    // Combine date and time
+    let combinedDateTime = data.date
+    if (data.time) {
+      const [hours, mins] = data.time.split(':')
+      const d = new Date(data.date)
+      d.setHours(parseInt(hours || '0', 10), parseInt(mins || '0', 10), 0, 0)
+      combinedDateTime = d.toISOString()
+    } else {
+      combinedDateTime = new Date(data.date).toISOString()
+    }
+
     const payload = {
       ...data,
+      date: combinedDateTime,
       amount: parseFloat(data.amount),
       accountId: type === 'TRANSFER' ? (data.accountId || undefined) : (useCard ? undefined : (data.accountId || undefined)),
       toAccountId: type === 'TRANSFER' ? (data.toAccountId || undefined) : undefined,
@@ -120,7 +148,21 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
 
       <Input label="Name" placeholder="e.g., Swiggy order" error={errors.name?.message} {...register('name')} />
       <Input label="Description (optional)" placeholder="Notes..." {...register('description')} />
-      <DatePicker label="Date" error={errors.date?.message} {...register('date')} />
+      
+      <div className="grid grid-cols-3 gap-2 items-start">
+        <div className="col-span-2">
+          <DatePicker label="Date" error={errors.date?.message} {...register('date')} />
+        </div>
+        <div>
+          <Input
+            label="Time"
+            type="time"
+            error={errors.time?.message}
+            {...register('time')}
+          />
+        </div>
+      </div>
+
 
       {/* Category Grid */}
       {filteredCategories.length > 0 && (

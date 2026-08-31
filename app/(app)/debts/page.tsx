@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { formatCurrency } from '@/lib/currency'
 import { Card, Button, Sheet, Input, Select, FAB, Badge, ProgressBar, DatePicker } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { CheckCircle, AlertCircle, Calendar, Trash2, Landmark, Coins } from 'lucide-react'
+import { CheckCircle, AlertCircle, Calendar, Trash2, Landmark, Coins, Edit2 } from 'lucide-react'
 
 interface DebtPayment {
   id: string
@@ -59,14 +59,37 @@ export default function DebtsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [addSheetOpen, setAddSheetOpen] = useState(false)
+  const [editSheetOpen, setEditSheetOpen] = useState(false)
   const [paySheetOpen, setPaySheetOpen] = useState(false)
   const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null)
+  const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
+
+  // Filter & Sort States
+  const [typeFilter, setTypeFilter] = useState<'ALL' | Debt['type']>('ALL')
+  const [sortBy, setSortBy] = useState<'priority' | 'date' | 'amount' | 'created'>('priority')
 
   // Add Debt Form State
+
   const [debtForm, setDebtForm] = useState({
     name: '',
     type: 'PERSONAL' as Debt['type'],
     amount: '',
+    remaining: '',
+    interestRate: '0',
+    isRecurring: false,
+    paymentDate: '',
+    paymentAmount: '',
+    deadline: '',
+    priority: 'MEDIUM' as Debt['priority'],
+    description: '',
+  })
+
+  // Edit Debt Form State
+  const [editForm, setEditForm] = useState({
+    name: '',
+    type: 'PERSONAL' as Debt['type'],
+    amount: '',
+    remaining: '',
     interestRate: '0',
     isRecurring: false,
     paymentDate: '',
@@ -131,6 +154,7 @@ export default function DebtsPage() {
         name: '',
         type: 'PERSONAL',
         amount: '',
+        remaining: '',
         interestRate: '0',
         isRecurring: false,
         paymentDate: '',
@@ -140,6 +164,59 @@ export default function DebtsPage() {
         description: '',
       })
       setAddSheetOpen(false)
+      loadData()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setFormLoading(false)
+    }
+  }
+
+  function openEditDebtModal(debt: Debt) {
+    setEditingDebt(debt)
+    setEditForm({
+      name: debt.name,
+      type: debt.type,
+      amount: String(debt.amount),
+      remaining: String(debt.remaining),
+      interestRate: String(debt.interestRate ?? 0),
+      isRecurring: Boolean(debt.isRecurring),
+      paymentDate: debt.paymentDate ? String(debt.paymentDate) : '',
+      paymentAmount: debt.paymentAmount ? String(debt.paymentAmount) : '',
+      deadline: debt.deadline ? new Date(debt.deadline).toISOString().slice(0, 10) : '',
+      priority: debt.priority,
+      description: debt.description || '',
+    })
+    setEditSheetOpen(true)
+  }
+
+  async function handleEditDebt(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingDebt) return
+    setFormLoading(true)
+    try {
+      const body = {
+        name: editForm.name,
+        type: editForm.type,
+        amount: parseFloat(editForm.amount),
+        remaining: parseFloat(editForm.remaining || editForm.amount),
+        interestRate: parseFloat(editForm.interestRate || '0'),
+        isRecurring: editForm.isRecurring,
+        paymentDate: editForm.isRecurring && editForm.paymentDate ? parseInt(editForm.paymentDate) : null,
+        paymentAmount: editForm.isRecurring && editForm.paymentAmount ? parseFloat(editForm.paymentAmount) : null,
+        deadline: !editForm.isRecurring && editForm.deadline ? editForm.deadline : null,
+        priority: editForm.priority,
+        description: editForm.description || null,
+      }
+
+      await fetch(`/api/debts/${editingDebt.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      setEditingDebt(null)
+      setEditSheetOpen(false)
       loadData()
     } catch (e) {
       console.error(e)
@@ -214,6 +291,41 @@ export default function DebtsPage() {
     (a, b) => new Date(b.paidDate).getTime() - new Date(a.paidDate).getTime()
   )
 
+  // Filter & Sort Debts
+  const filteredDebts = debts.filter((d) => {
+    if (typeFilter === 'ALL') return true
+    return d.type === typeFilter
+  })
+
+  const PRIORITY_ORDER: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 }
+
+  const sortedDebts = [...filteredDebts].sort((a, b) => {
+    if (sortBy === 'priority') {
+      const pDiff = (PRIORITY_ORDER[b.priority] || 0) - (PRIORITY_ORDER[a.priority] || 0)
+      if (pDiff !== 0) return pDiff
+      return Number(b.remaining) - Number(a.remaining)
+    }
+    if (sortBy === 'date') {
+      // Prioritize debts with upcoming due day / deadline
+      const getDateVal = (d: Debt) => {
+        if (d.isRecurring && d.paymentDate) {
+          const now = new Date()
+          const due = new Date(now.getFullYear(), now.getMonth(), d.paymentDate)
+          if (due < now) due.setMonth(due.getMonth() + 1)
+          return due.getTime()
+        }
+        if (d.deadline) return new Date(d.deadline).getTime()
+        return Infinity
+      }
+      return getDateVal(a) - getDateVal(b)
+    }
+    if (sortBy === 'amount') {
+      return Number(b.remaining) - Number(a.remaining)
+    }
+    // 'created'
+    return (b as any).id > (a as any).id ? 1 : -1
+  })
+
   return (
     <div className="pb-4">
       {/* Tab Selectors */}
@@ -260,16 +372,75 @@ export default function DebtsPage() {
 
       {tab === 'active' ? (
         <div className="px-4 space-y-4">
+          {/* Type Filter Tabs */}
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
+            <button
+              onClick={() => setTypeFilter('ALL')}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border',
+                typeFilter === 'ALL'
+                  ? 'bg-primary text-white border-primary shadow-sm'
+                  : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
+              )}
+            >
+              All ({debts.length})
+            </button>
+            {(['PERSONAL', 'LOAN', 'CREDIT_LINE', 'PAY_LATER'] as const).map((type) => {
+              const count = debts.filter((d) => d.type === type).length
+              return (
+                <button
+                  key={type}
+                  onClick={() => setTypeFilter(type)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0 transition-all border',
+                    typeFilter === type
+                      ? 'bg-primary text-white border-primary shadow-sm'
+                      : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                  )}
+                >
+                  {TYPE_LABELS[type]} ({count})
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Sort By Controls */}
+          <div className="flex items-center justify-between gap-2 px-1">
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Sort By:</span>
+            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+              {[
+                { id: 'priority', label: 'Priority' },
+                { id: 'date', label: 'Due Date' },
+                { id: 'amount', label: 'Highest Amount' },
+                { id: 'created', label: 'Latest Added' },
+              ].map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSortBy(s.id as any)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors',
+                    sortBy === s.id
+                      ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary font-semibold'
+                      : 'text-gray-500 hover:bg-surface-offset dark:hover:bg-gray-800'
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {loading ? (
             <p className="text-center text-gray-400 py-8">Loading debts...</p>
-          ) : debts.length === 0 ? (
+          ) : sortedDebts.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
               <Landmark className="mx-auto h-12 w-12 text-gray-500 mb-2" />
-              <p className="text-lg font-medium">No active debts</p>
-              <p className="text-sm">Click + to add a loan, personal debt or credit line.</p>
+              <p className="text-lg font-medium">No debts found</p>
+              <p className="text-sm">No debts match the selected type filter.</p>
             </div>
           ) : (
-            debts.map((debt) => {
+            sortedDebts.map((debt) => {
+
               const paidAmount = Number(debt.amount) - Number(debt.remaining)
               const pct = (paidAmount / Number(debt.amount)) * 100
 
@@ -355,8 +526,18 @@ export default function DebtsPage() {
                       <Button
                         size="sm"
                         variant="outline"
+                        onClick={() => openEditDebtModal(debt)}
+                        className="text-gray-600 dark:text-gray-300 hover:bg-surface-offset dark:hover:bg-gray-800"
+                        title="Edit Debt"
+                      >
+                        <Edit2 size={14} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => handleDeleteDebt(debt.id)}
                         className="text-danger border-danger/30 hover:bg-danger/10"
+                        title="Delete Debt"
                       >
                         <Trash2 size={14} />
                       </Button>
@@ -525,6 +706,131 @@ export default function DebtsPage() {
         </form>
       </Sheet>
 
+      {/* Edit Debt Sheet */}
+      <Sheet open={editSheetOpen} onClose={() => { setEditSheetOpen(false); setEditingDebt(null); }} title="Edit Debt Details">
+        <form onSubmit={handleEditDebt} className="space-y-4 pb-6">
+          <Input
+            label="Name / Creditor"
+            value={editForm.name}
+            onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+            placeholder="e.g. Personal loan from friend"
+            required
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Type"
+              value={editForm.type}
+              onChange={(e) =>
+                setEditForm((p) => ({ ...p, type: e.target.value as Debt['type'] }))
+              }
+            >
+              {Object.entries(TYPE_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </Select>
+
+            <Input
+              label="Interest Rate (%)"
+              type="number"
+              step="0.01"
+              value={editForm.interestRate}
+              onChange={(e) => setEditForm((p) => ({ ...p, interestRate: e.target.value }))}
+              placeholder="e.g. 10.5"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Total Debt Amount"
+              type="number"
+              value={editForm.amount}
+              onChange={(e) => setEditForm((p) => ({ ...p, amount: e.target.value }))}
+              placeholder="0.00"
+              required
+            />
+            <Input
+              label="Remaining Balance"
+              type="number"
+              value={editForm.remaining}
+              onChange={(e) => setEditForm((p) => ({ ...p, remaining: e.target.value }))}
+              placeholder="0.00"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Priority"
+              value={editForm.priority}
+              onChange={(e) =>
+                setEditForm((p) => ({ ...p, priority: e.target.value as Debt['priority'] }))
+              }
+            >
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2 py-1">
+            <input
+              type="checkbox"
+              id="editIsRecurring"
+              checked={editForm.isRecurring}
+              onChange={(e) => setEditForm((p) => ({ ...p, isRecurring: e.target.checked }))}
+              className="rounded text-primary focus:ring-primary h-4 w-4"
+            />
+            <label htmlFor="editIsRecurring" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              This has recurring/installment payments
+            </label>
+          </div>
+
+          {editForm.isRecurring ? (
+            <div className="grid grid-cols-2 gap-3 p-3 bg-surface-offset dark:bg-gray-800/50 rounded-xl">
+              <Input
+                label="Monthly Due Day"
+                type="number"
+                min="1"
+                max="31"
+                value={editForm.paymentDate}
+                onChange={(e) => setEditForm((p) => ({ ...p, paymentDate: e.target.value }))}
+                placeholder="e.g. 5"
+                required
+              />
+              <Input
+                label="Monthly EMI Amount"
+                type="number"
+                value={editForm.paymentAmount}
+                onChange={(e) => setEditForm((p) => ({ ...p, paymentAmount: e.target.value }))}
+                placeholder="0.00"
+                required
+              />
+            </div>
+          ) : (
+            <DatePicker
+              label="Payoff Deadline"
+              name="editDeadline"
+              value={editForm.deadline}
+              onChange={(e) => setEditForm((p) => ({ ...p, deadline: e.target.value }))}
+            />
+          )}
+
+          <Input
+            label="Description / Note"
+            value={editForm.description}
+            onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))}
+            placeholder="Optional notes"
+          />
+
+          <Button type="submit" size="lg" loading={formLoading}>
+            Save Changes
+          </Button>
+        </form>
+      </Sheet>
+
       {/* Pay Debt Sheet */}
       <Sheet
         open={paySheetOpen}
@@ -565,3 +871,4 @@ export default function DebtsPage() {
     </div>
   )
 }
+
