@@ -27,16 +27,16 @@ NEXTAUTH_SECRET="any-random-string-at-least-32-chars"
 NEXTAUTH_URL="http://localhost:3000"
 ```
 
-**Using Docker for PostgreSQL:**
+**Using Docker / Podman Compose for Local Setup:**
 ```bash
-docker run -d \
-  --name spendwise-db \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_DB=spendwise \
-  -p 5432:5432 \
-  postgres:15
+# Start PostgreSQL for local development
+podman compose -f docker-compose.dev.yml up -d spendwise-postgres-db
+# or: docker compose -f docker-compose.dev.yml up -d spendwise-postgres-db
+
+# Or start the full stack (web + database) in containers:
+podman compose -f docker-compose.dev.yml up --build
 ```
-Then set: `DATABASE_URL="postgresql://postgres:password@localhost:5432/spendwise"`
+Then set: `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/spendwise?schema=public"`
 
 ### 3. Set up the database
 ```bash

@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Card, Button, Input, Select } from '@/components/ui'
+import { Card, Button, Input, Select, Sheet } from '@/components/ui'
 import { signOut } from 'next-auth/react'
-import { User, Lock, Globe, Tag, Trash2, Database } from 'lucide-react'
+import { User, Lock, Globe, Tag, Trash2, Database, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface UserProfile { id: string; name: string; email: string; currency: string }
@@ -29,6 +29,10 @@ export default function SettingsPage() {
   const [pwMsg, setPwMsg] = useState('')
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
+  const [showClearModal, setShowClearModal] = useState(false)
+  const [confirmText, setConfirmText] = useState('')
+  const [clearing, setClearing] = useState(false)
+  const [clearMsg, setClearMsg] = useState('')
 
   async function load() {
     const [user, cats] = await Promise.all([
@@ -99,6 +103,29 @@ export default function SettingsPage() {
     } finally {
       setImporting(false)
       e.target.value = ''
+    }
+  }
+
+  async function handleClearData() {
+    setClearing(true)
+    setClearMsg('')
+    try {
+      const res = await fetch('/api/settings/clear-data', {
+        method: 'POST',
+      })
+      const result = await res.json()
+      if (res.ok) {
+        setClearMsg('All financial data cleared successfully!')
+        setShowClearModal(false)
+        setConfirmText('')
+        load()
+      } else {
+        setClearMsg(result.error || 'Failed to clear data')
+      }
+    } catch (err: any) {
+      setClearMsg('Network error while clearing data')
+    } finally {
+      setClearing(false)
     }
   }
 
@@ -230,8 +257,118 @@ export default function SettingsPage() {
       {/* Danger Zone */}
       <Card className="p-4 border-danger/30">
         <h2 className="font-semibold text-danger mb-3">Danger Zone</h2>
-        <Button variant="danger" onClick={() => signOut({ callbackUrl: '/login' })}>Sign Out</Button>
+        <div className="space-y-4">
+          <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-900/50">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="text-danger flex-shrink-0 mt-0.5" size={18} />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-danger">Clear All Data</h3>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                  Permanently delete all your accounts, credit cards, transactions, EMIs, debts, and budgets. Default categories will be preserved.
+                </p>
+                {clearMsg && (
+                  <p className={cn("text-xs font-medium mt-2", clearMsg.includes('successfully') ? "text-success" : "text-danger")}>
+                    {clearMsg}
+                  </p>
+                )}
+                <div className="mt-3">
+                  <Button
+                    id="clear-data-btn"
+                    variant="danger"
+                    size="sm"
+                    loading={clearing}
+                    onClick={() => {
+                      setClearMsg('')
+                      setConfirmText('')
+                      setShowClearModal(true)
+                    }}
+                  >
+                    <Trash2 size={14} className="mr-1.5" />
+                    Clear Data
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-border dark:border-gray-800 flex justify-between items-center">
+            <span className="text-sm text-gray-600 dark:text-gray-400">Sign out of your account</span>
+            <Button variant="outline" size="sm" onClick={() => signOut({ callbackUrl: '/login' })}>
+              Sign Out
+            </Button>
+          </div>
+        </div>
       </Card>
+
+      {/* Clear Data Confirmation Sheet Modal */}
+      <Sheet
+        open={showClearModal}
+        onClose={() => {
+          if (!clearing) {
+            setShowClearModal(false)
+            setConfirmText('')
+          }
+        }}
+        title="Clear All Financial Data"
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-900/50 flex items-start gap-3">
+            <AlertTriangle className="text-danger flex-shrink-0 mt-0.5" size={20} />
+            <div className="text-xs text-red-900 dark:text-red-200 space-y-1">
+              <p className="font-semibold text-sm text-danger">Warning: This action is irreversible!</p>
+              <p>This will permanently erase all your:</p>
+              <ul className="list-disc list-inside space-y-0.5 ml-1 text-gray-700 dark:text-gray-300">
+                <li>Bank, Wallet & Cash Accounts</li>
+                <li>Credit Cards & Pay Later Accounts</li>
+                <li>Transactions and Expense history</li>
+                <li>Recurring EMIs & Loans</li>
+                <li>Debts & Monthly Budgets</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+              Type <strong className="text-danger font-bold">DELETE</strong> to confirm:
+            </label>
+            <Input
+              id="confirm-delete-input"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="text-sm font-mono"
+              autoFocus
+            />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              id="cancel-clear-btn"
+              variant="outline"
+              className="flex-1"
+              disabled={clearing}
+              onClick={() => {
+                setShowClearModal(false)
+                setConfirmText('')
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              id="confirm-clear-btn"
+              variant="danger"
+              className="flex-1"
+              loading={clearing}
+              disabled={confirmText !== 'DELETE'}
+              onClick={handleClearData}
+            >
+              <Trash2 size={15} className="mr-1.5" />
+              Clear Everything
+            </Button>
+          </div>
+        </div>
+      </Sheet>
     </div>
   )
 }
+
