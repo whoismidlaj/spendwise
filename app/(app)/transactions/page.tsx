@@ -8,8 +8,14 @@ import { cn } from '@/lib/utils'
 
 interface Transaction {
   id: string; name: string; amount: number; type: string; date: string
+  description?: string
+  accountId?: string
+  toAccountId?: string
+  creditCardId?: string
+  categoryId?: string
   category?: { name: string; icon: string; color: string }
   account?: { name: string }
+  toAccount?: { name: string }
   creditCard?: { name: string }
 }
 
@@ -458,10 +464,15 @@ export default function TransactionsPage() {
             onSuccess={() => { setEditTx(null); loadRegular() }}
             initial={{
               id: editTx.id,
-              type: editTx.type as 'EXPENSE' | 'INCOME',
+              type: editTx.type as 'EXPENSE' | 'INCOME' | 'TRANSFER',
               amount: String(editTx.amount),
               name: editTx.name,
+              description: editTx.description || '',
               date: editTx.date,
+              accountId: editTx.accountId || '',
+              toAccountId: editTx.toAccountId || '',
+              creditCardId: editTx.creditCardId || '',
+              categoryId: editTx.categoryId || '',
             }}
           />
         )}

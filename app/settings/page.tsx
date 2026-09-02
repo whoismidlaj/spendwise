@@ -2,11 +2,13 @@
 import { useEffect, useState } from 'react'
 import { Card, Button, Input, Select, Sheet } from '@/components/ui'
 import { signOut } from 'next-auth/react'
-import { User, Lock, Globe, Tag, Trash2, Database, AlertTriangle } from 'lucide-react'
+import { User, Lock, Globe, Tag, Trash2, Database, AlertTriangle, Printer, CreditCard, Wallet, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface UserProfile { id: string; name: string; email: string; currency: string }
 interface Category { id: string; name: string; icon: string; color: string; type: string; isSystem: boolean }
+interface AccountItem { id: string; name: string; type: string }
+interface CreditCardItem { id: string; name: string; bank: string }
 
 const CURRENCIES = [
   { value: 'INR', label: '₹ Indian Rupee' },
@@ -20,6 +22,10 @@ const CURRENCIES = [
 export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
+  const [accounts, setAccounts] = useState<AccountItem[]>([])
+  const [creditCards, setCreditCards] = useState<CreditCardItem[]>([])
+  const [defaultMethodValue, setDefaultMethodValue] = useState<string>('')
+  const [defaultMethodMsg, setDefaultMethodMsg] = useState('')
   const [form, setForm] = useState({ name: '', email: '', currency: 'INR' })
   const [pwForm, setPwForm] = useState({ current: '', new: '', confirm: '' })
   const [catForm, setCatForm] = useState({ name: '', icon: '📌', color: '#6b7280', type: 'EXPENSE' })
@@ -35,16 +41,50 @@ export default function SettingsPage() {
   const [clearMsg, setClearMsg] = useState('')
 
   async function load() {
-    const [user, cats] = await Promise.all([
+    const [user, cats, accs, cards] = await Promise.all([
       fetch('/api/settings').then(r => r.json()),
       fetch('/api/categories').then(r => r.json()),
+      fetch('/api/accounts').then(r => r.json()),
+      fetch('/api/credit-cards').then(r => r.json()),
     ])
     setProfile(user)
     setForm({ name: user.name ?? '', email: user.email ?? '', currency: user.currency ?? 'INR' })
-    setCategories(cats)
+    setCategories(cats || [])
+    setAccounts(accs || [])
+    setCreditCards(cards || [])
+
+    try {
+      const stored = localStorage.getItem('spendwise_default_payment_method')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed?.type && parsed?.id) {
+          setDefaultMethodValue(`${parsed.type}:${parsed.id}`)
+        }
+      }
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   useEffect(() => { load() }, [])
+
+  function saveDefaultPaymentMethod(e: React.FormEvent) {
+    e.preventDefault()
+    setDefaultMethodMsg('')
+    if (!defaultMethodValue) {
+      localStorage.removeItem('spendwise_default_payment_method')
+      setDefaultMethodMsg('Default payment method reset to automatic.')
+      return
+    }
+
+    const [type, id] = defaultMethodValue.split(':')
+    const itemObj = {
+      type: type as 'ACCOUNT' | 'CARD',
+      id,
+    }
+    localStorage.setItem('spendwise_default_payment_method', JSON.stringify(itemObj))
+    setDefaultMethodMsg('Default payment method saved! It will be preselected on new transactions.')
+  }
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setMsg('')
@@ -152,6 +192,59 @@ export default function SettingsPage() {
         </form>
       </Card>
 
+      {/* Default Payment Method */}
+      <Card className="p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Wallet size={16} className="text-primary" />
+          <h2 className="font-semibold dark:text-white">Default Payment Method</h2>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          Choose which bank account or credit card is selected automatically when recording new transactions.
+        </p>
+        <form onSubmit={saveDefaultPaymentMethod} className="space-y-3">
+          <div>
+            <select
+              value={defaultMethodValue}
+              onChange={(e) => setDefaultMethodValue(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl border border-border dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+            >
+              <option value="">Automatic (First active account)</option>
+
+              {accounts.length > 0 && (
+                <optgroup label="🏦 Bank & Cash Accounts">
+                  {accounts.map((a) => (
+                    <option key={`ACCOUNT:${a.id}`} value={`ACCOUNT:${a.id}`}>
+                      {a.name} ({a.type})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+
+              {creditCards.length > 0 && (
+                <optgroup label="💳 Credit Cards & Pay Later">
+                  {creditCards.map((c) => (
+                    <option key={`CARD:${c.id}`} value={`CARD:${c.id}`}>
+                      {c.bank} {c.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
+
+          {defaultMethodMsg && (
+            <p className="text-xs text-success font-medium flex items-center gap-1.5">
+              <CheckCircle2 size={14} />
+              {defaultMethodMsg}
+            </p>
+          )}
+
+          <Button type="submit" size="sm">
+            Save Default Method
+          </Button>
+        </form>
+      </Card>
+
       {/* Password */}
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-4">
@@ -209,22 +302,34 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {/* Backup & Restore */}
+      {/* Backup & Export */}
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-4">
           <Database size={16} className="text-primary" />
-          <h2 className="font-semibold dark:text-white">Backup & Restore</h2>
+          <h2 className="font-semibold dark:text-white">Backup & Export Reports</h2>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Export your accounts, credit cards, transactions, and categories to a JSON backup file, or restore from a previous backup.
+          Export your financial data, liabilities, recurring EMIs, and debts into spreadsheets, printable statements, or JSON backups.
         </p>
         <div className="flex flex-col gap-3">
           <a
+            href="/statement"
+            target="_blank"
+            className="inline-flex items-center justify-between font-semibold rounded-xl transition-all min-h-[44px] px-4 py-2.5 text-xs sm:text-sm bg-primary hover:bg-primary-hover text-white"
+          >
+            <span className="flex items-center gap-2">
+              <Printer size={16} />
+              View & Print Liabilities Statement (PDF)
+            </span>
+            <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">PDF / Print</span>
+          </a>
+
+          <a
             href="/api/export"
             download
-            className="inline-flex items-center justify-center font-medium rounded-xl transition-all min-h-[44px] px-4 py-2.5 text-sm bg-primary hover:bg-primary-hover text-white text-center"
+            className="inline-flex items-center justify-center font-medium rounded-xl transition-all min-h-[44px] px-4 py-2.5 text-sm border border-border dark:border-gray-700 bg-surface-offset/60 hover:bg-surface-offset dark:bg-gray-800 dark:hover:bg-gray-750 text-gray-800 dark:text-gray-200 text-center"
           >
-            Export Data (JSON)
+            Export Complete Backup (JSON)
           </a>
           
           <div className="relative">
@@ -239,11 +344,11 @@ export default function SettingsPage() {
             <label
               htmlFor="import-file"
               className={cn(
-                "inline-flex items-center justify-center font-medium rounded-xl transition-all min-h-[44px] px-4 py-2.5 text-sm border border-border dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-surface-offset dark:hover:bg-gray-800 w-full cursor-pointer text-center",
+                "inline-flex items-center justify-center font-medium rounded-xl transition-all min-h-[44px] px-4 py-2.5 text-sm border border-dashed border-border dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-surface-offset dark:hover:bg-gray-800 w-full cursor-pointer text-center",
                 importing && "opacity-50 pointer-events-none"
               )}
             >
-              {importing ? 'Importing...' : 'Import Backup (JSON)'}
+              {importing ? 'Importing...' : 'Restore Backup (JSON)'}
             </label>
           </div>
           {importMsg && (

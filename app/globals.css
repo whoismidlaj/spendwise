@@ -54,3 +54,19 @@
 .count-animate {
   animation: count-up 0.5s ease forwards;
 }
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  header, nav, .print\:hidden, [role="dialog"], button[aria-label="Add"] {
+    display: none !important;
+  }
+  .safe-bottom {
+    padding-bottom: 0 !important;
+  }
+  .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl {
+    box-shadow: none !important;
+  }
+}

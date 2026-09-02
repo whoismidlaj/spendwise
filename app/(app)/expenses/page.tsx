@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { formatCurrency, remainingPrincipal } from '@/lib/currency'
 import { Card, Button, Sheet, Input, Select, FAB, Badge, ProgressBar, DatePicker } from '@/components/ui'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { CheckCircle, Calendar, AlertCircle, CreditCard, RefreshCw, Landmark, Filter, ChevronRight } from 'lucide-react'
+import { CheckCircle, Calendar, AlertCircle, CreditCard, RefreshCw, Landmark, Filter, ChevronRight, Download } from 'lucide-react'
+import { ExportLiabilitiesModal, ExportScope } from '@/components/ExportLiabilitiesModal'
 import { cn } from '@/lib/utils'
 
 interface Transaction { id: string; name: string; amount: number; type: string; date: string; category?: { name: string; icon: string; color: string } }
@@ -128,6 +129,12 @@ export default function ExpensesPage() {
   const [payAccountId, setPayAccountId] = useState('')
   const [payLoading, setPayLoading] = useState(false)
 
+  // Export Modal State & Liabilities Data
+  const [debts, setDebts] = useState<any[]>([])
+  const [creditCards, setCreditCards] = useState<any[]>([])
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [exportScope, setExportScope] = useState<ExportScope>('recurring')
+
   function getPeriodDates(p: string) {
     const now = new Date()
     if (p === 'thisMonth') return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59) }
@@ -208,6 +215,9 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     fetch('/api/accounts').then(r => r.json()).then(setAccounts)
+    fetch('/api/debts').then(r => r.json()).then(setDebts)
+    fetch('/api/credit-cards').then(r => r.json()).then(setCreditCards)
+    fetch('/api/recurring').then(r => r.json()).then(setRecurring)
   }, [])
 
   useEffect(() => { 
@@ -290,15 +300,29 @@ export default function ExpensesPage() {
 
   return (
     <div className="pb-4">
-      {/* Top Nav Tabs */}
-      <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide">
-        {(['upcoming', 'regular', 'recurring'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={cn('px-4 py-2 rounded-full text-sm font-medium flex-shrink-0 transition-colors',
-              tab === t ? 'bg-primary text-white shadow-sm' : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300')}>
-            {t === 'upcoming' ? 'Upcoming Dues' : t === 'regular' ? 'Regular Expenses' : 'Recurring & EMIs'}
-          </button>
-        ))}
+      {/* Top Nav Tabs & Export Action */}
+      <div className="flex items-center justify-between gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-border dark:border-gray-800">
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide flex-1">
+          {(['upcoming', 'regular', 'recurring'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={cn('px-3.5 py-2 rounded-full text-xs sm:text-sm font-medium flex-shrink-0 transition-colors',
+                tab === t ? 'bg-primary text-white shadow-sm' : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300')}>
+              {t === 'upcoming' ? 'Upcoming Dues' : t === 'regular' ? 'Regular Expenses' : 'Recurring & EMIs'}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => {
+            setExportScope(tab === 'upcoming' ? 'upcoming' : 'recurring')
+            setExportModalOpen(true)
+          }}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-border dark:border-gray-700 bg-surface-offset/60 dark:bg-gray-800/80 hover:bg-surface-offset dark:hover:bg-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-200 transition-all flex-shrink-0 active:scale-95"
+          title="Export Expenses & EMIs"
+        >
+          <Download size={13} className="text-primary" />
+          <span>Export</span>
+        </button>
       </div>
 
       {/* UPCOMING EXPENSES TAB */}
@@ -722,6 +746,18 @@ export default function ExpensesPage() {
           </form>
         )}
       </Sheet>
+
+      {/* Export Liabilities & EMIs Modal */}
+      <ExportLiabilitiesModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        initialScope={exportScope}
+        debts={debts}
+        recurring={recurring}
+        creditCards={creditCards}
+        upcomingItems={upcomingItems}
+        upcomingSummary={upcomingSummary}
+      />
     </div>
   )
 }

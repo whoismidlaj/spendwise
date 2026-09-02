@@ -38,7 +38,7 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
   const [cards, setCards] = useState<{ id: string; name: string }[]>([])
   const [categories, setCategories] = useState<{ id: string; name: string; icon: string; type: string }[]>([])
   const [loading, setLoading] = useState(false)
-  const [useCard, setUseCard] = useState(false)
+  const [useCard, setUseCard] = useState(Boolean(initial?.creditCardId))
 
   const initialDateObj = initial?.date ? new Date(initial.date) : new Date()
   const initialDateStr = initial?.date
@@ -46,7 +46,7 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
     : new Date().toISOString().slice(0, 10)
   const initialTimeStr = initial?.time || (initial?.date && initial.date.includes('T') ? getCurrentTimeStr(initialDateObj) : getCurrentTimeStr())
 
-  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       type: initial?.type ?? 'EXPENSE',
@@ -57,23 +57,63 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
       time: initialTimeStr,
       accountId: initial?.accountId ?? '',
       toAccountId: initial?.toAccountId ?? '',
+      creditCardId: initial?.creditCardId ?? '',
       categoryId: initial?.categoryId ?? '',
     },
   })
 
   const type = watch('type')
+  const selectedAccountId = watch('accountId')
+  const selectedCreditCardId = watch('creditCardId')
 
+  // Load accounts, cards, categories and apply defaults
   useEffect(() => {
     Promise.all([
       fetch('/api/accounts').then(r => r.json()),
       fetch('/api/credit-cards').then(r => r.json()),
       fetch('/api/categories').then(r => r.json()),
     ]).then(([accs, ccs, cats]) => {
-      setAccounts(accs)
-      setCards(ccs)
-      setCategories(cats)
+      setAccounts(accs || [])
+      setCards(ccs || [])
+      setCategories(cats || [])
+
+      // If adding a new transaction (not editing existing)
+      if (!initial?.id) {
+        // Check for user-defined default payment method
+        try {
+          const storedDefault = localStorage.getItem('spendwise_default_payment_method')
+          if (storedDefault) {
+            const def = JSON.parse(storedDefault)
+            if (def.type === 'CARD' && def.id && (ccs || []).some((c: any) => c.id === def.id)) {
+              setUseCard(true)
+              setValue('creditCardId', def.id)
+              return
+            } else if (def.type === 'ACCOUNT' && def.id && (accs || []).some((a: any) => a.id === def.id)) {
+              setUseCard(false)
+              setValue('accountId', def.id)
+              return
+            }
+          }
+        } catch (e) {
+          console.error(e)
+        }
+
+        // Fallback default: select first bank account if available
+        if (accs && accs.length > 0 && !selectedAccountId) {
+          setValue('accountId', accs[0].id)
+        }
+      } else {
+        // If editing existing transaction
+        if (initial.creditCardId) {
+          setUseCard(true)
+          setValue('creditCardId', initial.creditCardId)
+        } else if (initial.accountId) {
+          setUseCard(false)
+          setValue('accountId', initial.accountId)
+        }
+      }
     })
-  }, [])
+  }, [initial, setValue])
 
   const filteredCategories = categories.filter(c =>
     type === 'TRANSFER' ? true : c.type === type
@@ -94,21 +134,43 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
     }
 
     const payload = {
-      ...data,
-      date: combinedDateTime,
+      type: data.type,
       amount: parseFloat(data.amount),
-      accountId: type === 'TRANSFER' ? (data.accountId || undefined) : (useCard ? undefined : (data.accountId || undefined)),
-      toAccountId: type === 'TRANSFER' ? (data.toAccountId || undefined) : undefined,
-      creditCardId: type === 'TRANSFER' ? undefined : (useCard ? (data.creditCardId || undefined) : undefined),
-      categoryId: data.categoryId || undefined,
+      name: data.name,
+      description: data.description || null,
+      date: combinedDateTime,
+      accountId: data.type === 'TRANSFER'
+        ? (data.accountId || null)
+        : (useCard ? null : (data.accountId || null)),
+      toAccountId: data.type === 'TRANSFER'
+        ? (data.toAccountId || null)
+        : null,
+      creditCardId: data.type === 'TRANSFER'
+        ? null
+        : (useCard ? (data.creditCardId || null) : null),
+      categoryId: data.categoryId || null,
     }
 
     const url = initial?.id ? `/api/transactions/${initial.id}` : '/api/transactions'
     const method = initial?.id ? 'PATCH' : 'POST'
 
-    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-    setLoading(false)
-    onSuccess()
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        alert(err.error || 'Failed to save transaction')
+      } else {
+        onSuccess()
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -163,7 +225,6 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
         </div>
       </div>
 
-
       {/* Category Grid */}
       {filteredCategories.length > 0 && (
         <div>
@@ -195,14 +256,39 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
       {/* Account / Card toggle */}
       {type !== 'TRANSFER' && (
         <div>
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1.5">
+            Payment Source
+          </label>
           <div className="flex gap-2 mb-2">
-            <button type="button" onClick={() => setUseCard(false)}
-              className={cn('px-3 py-1.5 rounded-lg text-sm font-medium', !useCard ? 'bg-primary text-white' : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300')}>
-              Account
+            <button
+              type="button"
+              onClick={() => {
+                setUseCard(false)
+                if (!watch('accountId') && accounts.length > 0) {
+                  setValue('accountId', accounts[0].id)
+                }
+              }}
+              className={cn(
+                'px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                !useCard ? 'bg-primary text-white shadow-xs' : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+              )}
+            >
+              Bank / Cash Account
             </button>
-            <button type="button" onClick={() => setUseCard(true)}
-              className={cn('px-3 py-1.5 rounded-lg text-sm font-medium', useCard ? 'bg-primary text-white' : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300')}>
-              Credit Card
+            <button
+              type="button"
+              onClick={() => {
+                setUseCard(true)
+                if (!watch('creditCardId') && cards.length > 0) {
+                  setValue('creditCardId', cards[0].id)
+                }
+              }}
+              className={cn(
+                'px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                useCard ? 'bg-primary text-white shadow-xs' : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+              )}
+            >
+              Credit Card / Pay Later
             </button>
           </div>
           {!useCard ? (

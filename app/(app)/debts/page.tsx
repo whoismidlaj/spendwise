@@ -3,7 +3,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { formatCurrency, remainingPrincipal } from '@/lib/currency'
 import { Card, Button, Sheet, Input, Select, FAB, Badge, ProgressBar, DatePicker } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { CheckCircle, AlertCircle, Calendar, Trash2, Landmark, Coins, Edit2, CreditCard, RefreshCw } from 'lucide-react'
+import { CheckCircle, AlertCircle, Calendar, Trash2, Landmark, Coins, Edit2, CreditCard, RefreshCw, Download } from 'lucide-react'
+import { ExportLiabilitiesModal, ExportScope } from '@/components/ExportLiabilitiesModal'
 
 interface DebtPayment {
   id: string
@@ -116,10 +117,12 @@ export default function DebtsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Sheets
+  // Sheets & Modals
   const [addSheetOpen, setAddSheetOpen] = useState(false)
   const [editSheetOpen, setEditSheetOpen] = useState(false)
   const [paySheetOpen, setPaySheetOpen] = useState(false)
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [exportScope, setExportScope] = useState<ExportScope>('all')
   const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null)
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
 
@@ -508,40 +511,54 @@ export default function DebtsPage() {
 
   return (
     <div className="pb-4">
-      {/* Tab Selectors */}
-      <div className="flex gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-border dark:border-gray-800 overflow-x-auto scrollbar-hide">
+      {/* Tab Selectors & Export Action */}
+      <div className="flex items-center justify-between gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-border dark:border-gray-800">
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide flex-1">
+          <button
+            onClick={() => setTab('active')}
+            className={cn(
+              'px-3.5 py-2 rounded-full text-xs sm:text-sm font-medium flex-shrink-0 transition-all',
+              tab === 'active'
+                ? 'bg-primary text-white shadow-sm'
+                : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+            )}
+          >
+            Debts & Liabilities
+          </button>
+          <button
+            onClick={() => setTab('upcoming')}
+            className={cn(
+              'px-3.5 py-2 rounded-full text-xs sm:text-sm font-medium flex-shrink-0 transition-all',
+              tab === 'upcoming'
+                ? 'bg-primary text-white shadow-sm'
+                : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+            )}
+          >
+            Upcoming Dues & Bills
+          </button>
+          <button
+            onClick={() => setTab('history')}
+            className={cn(
+              'px-3.5 py-2 rounded-full text-xs sm:text-sm font-medium flex-shrink-0 transition-all',
+              tab === 'history'
+                ? 'bg-primary text-white shadow-sm'
+                : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+            )}
+          >
+            Payment History
+          </button>
+        </div>
+
         <button
-          onClick={() => setTab('active')}
-          className={cn(
-            'px-4 py-2 rounded-full text-sm font-medium flex-shrink-0 transition-all',
-            tab === 'active'
-              ? 'bg-primary text-white shadow-sm'
-              : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
-          )}
+          onClick={() => {
+            setExportScope(tab === 'upcoming' ? 'upcoming' : 'debts')
+            setExportModalOpen(true)
+          }}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-border dark:border-gray-700 bg-surface-offset/60 dark:bg-gray-800/80 hover:bg-surface-offset dark:hover:bg-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-200 transition-all flex-shrink-0 active:scale-95"
+          title="Export Debts & Dues"
         >
-          Debts & Liabilities
-        </button>
-        <button
-          onClick={() => setTab('upcoming')}
-          className={cn(
-            'px-4 py-2 rounded-full text-sm font-medium flex-shrink-0 transition-all',
-            tab === 'upcoming'
-              ? 'bg-primary text-white shadow-sm'
-              : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
-          )}
-        >
-          Upcoming Dues & Bills
-        </button>
-        <button
-          onClick={() => setTab('history')}
-          className={cn(
-            'px-4 py-2 rounded-full text-sm font-medium flex-shrink-0 transition-all',
-            tab === 'history'
-              ? 'bg-primary text-white shadow-sm'
-              : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
-          )}
-        >
-          Payment History
+          <Download size={13} className="text-primary" />
+          <span>Export</span>
         </button>
       </div>
 
@@ -1363,6 +1380,18 @@ export default function DebtsPage() {
           </form>
         )}
       </Sheet>
+
+      {/* Export Liabilities & Dues Modal */}
+      <ExportLiabilitiesModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        initialScope={exportScope}
+        debts={debts}
+        recurring={recurringList}
+        creditCards={creditCards}
+        upcomingItems={upcomingItems}
+        upcomingSummary={upcomingSummary}
+      />
     </div>
   )
 }

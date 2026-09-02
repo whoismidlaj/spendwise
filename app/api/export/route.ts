@@ -9,12 +9,14 @@ export async function GET(req: NextRequest) {
 
   const userId = session.user.id
 
-  const [accounts, creditCards, categories, debts, transactions] = await Promise.all([
+  const [accounts, creditCards, categories, debts, transactions, recurringExpenses, budgets] = await Promise.all([
     prisma.account.findMany({ where: { userId } }),
     prisma.creditCard.findMany({ where: { userId } }),
     prisma.category.findMany({ where: { userId } }),
-    prisma.debt.findMany({ where: { userId } }),
+    prisma.debt.findMany({ where: { userId }, include: { payments: true } }),
     prisma.transaction.findMany({ where: { userId } }),
+    prisma.recurringExpense.findMany({ where: { userId }, include: { payments: true } }),
+    prisma.budget.findMany({ where: { userId } }),
   ])
 
   const backupData = {
@@ -24,6 +26,8 @@ export async function GET(req: NextRequest) {
     creditCards,
     categories,
     debts,
+    recurringExpenses,
+    budgets,
     transactions,
   }
 

@@ -100,71 +100,6 @@ export default function DashboardPage() {
     return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
   }
 
-  // Construct upcoming dues timeline
-  const upcomingDues: Array<{
-    id: string
-    name: string
-    source: 'CARD' | 'PAYLATER' | 'DEBT'
-    amount: number
-    minimumAmount?: number
-    dueDate: Date
-    daysLeft: number
-    typeLabel: string
-  }> = []
-
-  cards.forEach(card => {
-    if (card.dueAmount > 0) {
-      const dueDay = card.dueDate
-      const daysLeft = daysUntilDueDate(dueDay)
-      const dueDate = getNextDueDate(dueDay)
-      upcomingDues.push({
-        id: card.id,
-        name: `${card.bank} ${card.name}`,
-        source: card.type,
-        amount: card.dueAmount,
-        minimumAmount: card.minimumDue,
-        dueDate,
-        daysLeft,
-        typeLabel: card.type === 'PAYLATER' ? 'Pay Later' : 'Credit Card'
-      })
-    }
-  })
-
-  debts.forEach(debt => {
-    if (debt.remaining > 0) {
-      if (debt.isRecurring && debt.paymentDate && debt.paymentAmount) {
-        const dueDay = debt.paymentDate
-        const daysLeft = daysUntilDueDate(dueDay)
-        const dueDate = getNextDueDate(dueDay)
-        upcomingDues.push({
-          id: debt.id,
-          name: debt.name,
-          source: 'DEBT',
-          amount: debt.paymentAmount,
-          dueDate,
-          daysLeft,
-          typeLabel: debt.type === 'PAY_LATER' ? 'Pay Later Debt' : (debt.type === 'LOAN' ? 'Loan EMI' : 'Debt EMI')
-        })
-      } else if (debt.deadline) {
-        const deadlineDate = new Date(debt.deadline)
-        const now = new Date()
-        const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / 86400000)
-        upcomingDues.push({
-          id: debt.id,
-          name: debt.name,
-          source: 'DEBT',
-          amount: debt.remaining,
-          dueDate: deadlineDate,
-          daysLeft,
-          typeLabel: debt.type === 'PAY_LATER' ? 'Pay Later' : (debt.type === 'LOAN' ? 'Loan Payoff' : 'Debt Payoff')
-        })
-      }
-    }
-  })
-
-  // Sort upcoming dues by daysLeft (ascending)
-  upcomingDues.sort((a, b) => a.daysLeft - b.daysLeft)
-
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
@@ -197,7 +132,6 @@ export default function DashboardPage() {
           <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 px-1">Cards & Pay Later</h3>
           <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
             {cards.map(card => {
-              const pct = (card.usedLimit / card.totalLimit) * 100
               const daysLeft = daysUntilDueDate(card.dueDate)
               return (
                 <Card key={card.id} className="min-w-[240px] p-4 flex-shrink-0">
@@ -232,49 +166,6 @@ export default function DashboardPage() {
               )
             })}
           </div>
-        </div>
-      )}
-
-      {/* Upcoming Bills & Dues Section */}
-      {upcomingDues.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 px-1">Upcoming Bills & Dues</h3>
-          <Card className="divide-y divide-border dark:divide-gray-800 p-1">
-            {upcomingDues.slice(0, 5).map(due => (
-              <div key={due.id} className="flex items-center justify-between px-3 py-3">
-                <div className="flex items-start gap-2.5 min-w-0">
-                  <div className={`mt-0.5 p-1.5 rounded-lg flex-shrink-0 ${
-                    due.daysLeft <= 3 
-                      ? 'bg-danger/10 text-danger' 
-                      : due.daysLeft <= 7 
-                      ? 'bg-warning/10 text-warning' 
-                      : 'bg-primary/10 text-primary'
-                  }`}>
-                    <Calendar size={15} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-medium dark:text-white truncate">{due.name}</p>
-                      <Badge className="bg-surface-offset dark:bg-gray-800 text-[9px] text-gray-500 font-normal px-1 py-0">{due.typeLabel}</Badge>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {due.daysLeft <= 0 ? (
-                        <span className="text-danger font-semibold">Overdue!</span>
-                      ) : (
-                        `Due in ${due.daysLeft} days (${due.dueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})`
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right flex-shrink-0 pl-2">
-                  <p className="text-sm font-bold text-danger tabular-nums">{formatCurrency(due.amount)}</p>
-                  {due.minimumAmount && due.minimumAmount > 0 ? (
-                    <p className="text-[10px] text-gray-400">Min: {formatCurrency(due.minimumAmount)}</p>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </Card>
         </div>
       )}
 

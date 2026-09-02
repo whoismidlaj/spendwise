@@ -14,7 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   })
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Reverse old balance effect
+  // 1. Reverse old balance & credit card effect
   if (existing.type === 'TRANSFER') {
     if (existing.accountId) {
       await prisma.account.update({
@@ -41,23 +41,42 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         data: { balance: { increment: oldDelta } },
       })
     }
+  } else if (existing.creditCardId && existing.type === 'EXPENSE') {
+    await prisma.creditCard.update({
+      where: { id: existing.creditCardId },
+      data: {
+        usedLimit: { decrement: Number(existing.amount) },
+        dueAmount: { decrement: Number(existing.amount) },
+      },
+    })
   }
 
+  // 2. Parse & sanitize body
   const body = await req.json()
+  const dataToUpdate: Record<string, any> = {}
+
+  if (body.type !== undefined) dataToUpdate.type = body.type
+  if (body.name !== undefined) dataToUpdate.name = body.name
+  if (body.description !== undefined) dataToUpdate.description = body.description || null
+  if (body.amount !== undefined) dataToUpdate.amount = Number(body.amount)
+  if (body.date !== undefined) dataToUpdate.date = new Date(body.date)
+  if ('accountId' in body) dataToUpdate.accountId = body.accountId || null
+  if ('toAccountId' in body) dataToUpdate.toAccountId = body.toAccountId || null
+  if ('creditCardId' in body) dataToUpdate.creditCardId = body.creditCardId || null
+  if ('categoryId' in body) dataToUpdate.categoryId = body.categoryId || null
+
   const updated = await prisma.transaction.update({
     where: { id },
-    data: {
-      ...body,
-      date: body.date ? new Date(body.date) : undefined,
-    },
+    data: dataToUpdate,
     include: {
       account: { select: { name: true, color: true } },
       toAccount: { select: { name: true, color: true } },
+      creditCard: { select: { name: true, color: true } },
       category: { select: { name: true, icon: true, color: true } },
     },
   })
 
-  // Apply new balance effect
+  // 3. Apply new balance & credit card effect
   if (updated.type === 'TRANSFER') {
     if (updated.accountId) {
       await prisma.account.update({
@@ -84,6 +103,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         data: { balance: { increment: newDelta } },
       })
     }
+  } else if (updated.creditCardId && updated.type === 'EXPENSE') {
+    await prisma.creditCard.update({
+      where: { id: updated.creditCardId },
+      data: {
+        usedLimit: { increment: Number(updated.amount) },
+        dueAmount: { increment: Number(updated.amount) },
+      },
+    })
   }
 
   return NextResponse.json(toJson(updated))
@@ -100,7 +127,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   })
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Reverse balance effect
+  // Reverse balance & credit card effect
   if (existing.type === 'TRANSFER') {
     if (existing.accountId) {
       await prisma.account.update({
@@ -127,6 +154,14 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
         data: { balance: { increment: delta } },
       })
     }
+  } else if (existing.creditCardId && existing.type === 'EXPENSE') {
+    await prisma.creditCard.update({
+      where: { id: existing.creditCardId },
+      data: {
+        usedLimit: { decrement: Number(existing.amount) },
+        dueAmount: { decrement: Number(existing.amount) },
+      },
+    })
   }
 
   await prisma.transaction.delete({ where: { id } })
