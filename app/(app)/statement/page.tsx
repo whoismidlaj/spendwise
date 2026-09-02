@@ -27,7 +27,7 @@ import {
   RECURRING_TYPE_LABELS
 } from '@/lib/export-liabilities'
 
-export default function StatementPage() {
+function StatementContent() {
   const searchParams = useSearchParams()
   const initialScope = searchParams.get('scope') || 'all'
 
@@ -537,3 +537,19 @@ export default function StatementPage() {
     </div>
   )
 }
+
+export default function StatementPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+          <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-400">Loading Financial Statement...</p>
+        </div>
+      }
+    >
+      <StatementContent />
+    </React.Suspense>
+  )
+}
+
