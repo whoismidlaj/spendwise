@@ -41,7 +41,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const parsed = debtSchema.safeParse(body)
-    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+    if (!parsed.success) {
+      const errorMsg = parsed.error.issues?.[0]?.message || 'Invalid debt data'
+      return NextResponse.json({ error: errorMsg }, { status: 400 })
+    }
 
     const debtData = {
       ...parsed.data,

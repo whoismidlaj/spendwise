@@ -18,7 +18,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const body = await req.json()
     const parsed = paySchema.safeParse(body)
-    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+    if (!parsed.success) {
+      const errorMsg = parsed.error.issues?.[0]?.message || 'Invalid payment data'
+      return NextResponse.json({ error: errorMsg }, { status: 400 })
+    }
 
     const { amount, accountId } = parsed.data
 

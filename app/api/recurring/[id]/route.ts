@@ -33,7 +33,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const body = await req.json()
     const parsed = recurringUpdateSchema.safeParse(body)
-    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+    if (!parsed.success) {
+      const errorMsg = parsed.error.issues?.[0]?.message || 'Invalid recurring expense data'
+      return NextResponse.json({ error: errorMsg }, { status: 400 })
+    }
 
     const updateData: any = { ...parsed.data }
     if (parsed.data.startDate) {

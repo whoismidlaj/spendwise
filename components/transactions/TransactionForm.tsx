@@ -162,12 +162,16 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
       })
       if (!res.ok) {
         const err = await res.json()
-        alert(err.error || 'Failed to save transaction')
+        const errMsg = typeof err.error === 'string'
+          ? err.error
+          : (err.error?.issues?.[0]?.message || err.error?.message || err.message || 'Failed to save transaction')
+        alert(errMsg)
       } else {
         onSuccess()
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      alert(err?.message || 'An unexpected error occurred')
     } finally {
       setLoading(false)
     }

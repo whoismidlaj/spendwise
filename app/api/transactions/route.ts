@@ -6,9 +6,9 @@ import { z } from 'zod'
 
 const txSchema = z.object({
   type: z.enum(['INCOME', 'EXPENSE', 'TRANSFER']),
-  amount: z.number().positive(),
-  name: z.string().min(1),
-  description: z.string().optional(),
+  amount: z.number().positive('Amount must be positive'),
+  name: z.string().min(1, 'Name is required'),
+  description: z.string().optional().nullable(),
   date: z.string(),
   accountId: z.string().optional().nullable(),
   toAccountId: z.string().optional().nullable(),
@@ -86,66 +86,74 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json()
-  const parsed = txSchema.safeParse(body)
-  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
-
-  const data = parsed.data
-
-  const tx = await prisma.transaction.create({
-    data: {
-      userId: session.user.id,
-      type: data.type,
-      amount: data.amount,
-      name: data.name,
-      description: data.description,
-      date: new Date(data.date),
-      accountId: data.accountId || null,
-      toAccountId: data.toAccountId || null,
-      creditCardId: data.creditCardId || null,
-      categoryId: data.categoryId || null,
-    },
-    include: {
-      account: { select: { name: true, color: true } },
-      toAccount: { select: { name: true, color: true } },
-      category: { select: { name: true, icon: true, color: true } },
-    },
-  })
-
-  // Update account balance
-  if (data.type === 'TRANSFER') {
-    if (data.accountId) {
-      await prisma.account.update({
-        where: { id: data.accountId },
-        data: { balance: { decrement: data.amount } },
-      })
+  try {
+    const body = await req.json()
+    const parsed = txSchema.safeParse(body)
+    if (!parsed.success) {
+      const errorMsg = parsed.error.issues?.[0]?.message || 'Invalid transaction data'
+      return NextResponse.json({ error: errorMsg }, { status: 400 })
     }
-    if (data.toAccountId) {
-      await prisma.account.update({
-        where: { id: data.toAccountId },
-        data: { balance: { increment: data.amount } },
-      })
-    }
-  } else if (data.accountId) {
-    const delta = data.type === 'INCOME' ? data.amount : data.type === 'EXPENSE' ? -data.amount : 0
-    if (delta !== 0) {
-      await prisma.account.update({
-        where: { id: data.accountId },
-        data: { balance: { increment: delta } },
-      })
-    }
-  }
 
-  // Update credit card used limit
-  if (data.creditCardId && data.type === 'EXPENSE') {
-    await prisma.creditCard.update({
-      where: { id: data.creditCardId },
+    const data = parsed.data
+
+    const tx = await prisma.transaction.create({
       data: {
-        usedLimit: { increment: data.amount },
-        dueAmount: { increment: data.amount },
+        userId: session.user.id,
+        type: data.type,
+        amount: data.amount,
+        name: data.name,
+        description: data.description,
+        date: new Date(data.date),
+        accountId: data.accountId || null,
+        toAccountId: data.toAccountId || null,
+        creditCardId: data.creditCardId || null,
+        categoryId: data.categoryId || null,
+      },
+      include: {
+        account: { select: { name: true, color: true } },
+        toAccount: { select: { name: true, color: true } },
+        category: { select: { name: true, icon: true, color: true } },
       },
     })
-  }
 
-  return NextResponse.json(toJson(tx), { status: 201 })
+    // Update account balance
+    if (data.type === 'TRANSFER') {
+      if (data.accountId) {
+        await prisma.account.update({
+          where: { id: data.accountId },
+          data: { balance: { decrement: data.amount } },
+        })
+      }
+      if (data.toAccountId) {
+        await prisma.account.update({
+          where: { id: data.toAccountId },
+          data: { balance: { increment: data.amount } },
+        })
+      }
+    } else if (data.accountId) {
+      const delta = data.type === 'INCOME' ? data.amount : data.type === 'EXPENSE' ? -data.amount : 0
+      if (delta !== 0) {
+        await prisma.account.update({
+          where: { id: data.accountId },
+          data: { balance: { increment: delta } },
+        })
+      }
+    }
+
+    // Update credit card used limit
+    if (data.creditCardId && data.type === 'EXPENSE') {
+      await prisma.creditCard.update({
+        where: { id: data.creditCardId },
+        data: {
+          usedLimit: { increment: data.amount },
+          dueAmount: { increment: data.amount },
+        },
+      })
+    }
+
+    return NextResponse.json(toJson(tx), { status: 201 })
+  } catch (error: any) {
+    console.error('Error creating transaction:', error)
+    return NextResponse.json({ error: error.message || 'Failed to create transaction' }, { status: 500 })
+  }
 }
