@@ -1,225 +1,68 @@
 'use client'
+
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { AlertCircle, ArrowRight, CalendarDays, Landmark, WalletCards } from 'lucide-react'
+import { Card, Button } from '@/components/ui'
 import { formatCurrency } from '@/lib/currency'
-import { Card, FAB, ProgressBar, Sheet, Badge } from '@/components/ui'
-import { TransactionForm } from '@/components/transactions/TransactionForm'
-import { TrendingUp, TrendingDown, CreditCard, Clock, Calendar, AlertCircle } from 'lucide-react'
 
-interface Account { id: string; name: string; balance: number; type: string; color: string }
-interface CCCard { id: string; name: string; bank: string; totalLimit: number; usedLimit: number; dueAmount: number; minimumDue: number; expectedDue: number | null; billDueDate: string | null; dueDate: number; statementDate: number; color: string; type: 'CARD' | 'PAYLATER' }
-interface Debt {
-  id: string
-  name: string
-  type: 'PERSONAL' | 'LOAN' | 'CREDIT_LINE' | 'PAY_LATER'
-  amount: number
-  remaining: number
-  interestRate: number
-  isRecurring: boolean
-  paymentDate?: number
-  paymentAmount?: number
-  deadline?: string
-  priority: 'LOW' | 'MEDIUM' | 'HIGH'
-  description?: string
+type PlanItem = {
+  id: string; name: string; date: string; kind: 'INCOME' | 'PAYMENT'; source: string
+  amount: number; reservedAmount: number; isEssential: boolean; status: string; accountName?: string; projectedBalance: number
 }
-interface Transaction { id: string; name: string; amount: number; type: string; date: string; category?: { name: string; icon: string; color: string }; account?: { name: string } }
-interface Summary { totalIncome: number; totalExpense: number; netSavings: number }
+type Plan = { items: PlanItem[]; summary: { bankBalance: number; expectedIncome: number; receivedIncome: number; requiredPayments: number; optionalPayments: number; cashBuffer: number; safeToSpend: number; lowestProjectedBalance: number; shortfall: number } }
 
-function AnimatedAmount({ value, currency = 'INR' }: { value: number; currency?: string }) {
-  const [displayed, setDisplayed] = useState(0)
-  useEffect(() => {
-    const start = performance.now()
-    const duration = 800
-    let rafId: number
-    const raf = (time: number) => {
-      const progress = Math.min((time - start) / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      setDisplayed(value * eased)
-      if (progress < 1) {
-        rafId = requestAnimationFrame(raf)
-      }
-    }
-    rafId = requestAnimationFrame(raf)
-    return () => cancelAnimationFrame(rafId)
-  }, [value])
-  return <span className="tabular-nums">{formatCurrency(displayed, currency)}</span>
-}
-
-function daysUntilDueDate(dueDay: number): number {
-  const now = new Date()
-  const due = new Date(now.getFullYear(), now.getMonth(), dueDay)
-  if (due < now) due.setMonth(due.getMonth() + 1)
-  return Math.ceil((due.getTime() - now.getTime()) / 86400000)
-}
-
-function getNextDueDate(dueDay: number): Date {
-  const now = new Date()
-  const due = new Date(now.getFullYear(), now.getMonth(), dueDay)
-  if (due < now) due.setMonth(due.getMonth() + 1)
-  return due
+function dateText(date: string) {
+  return new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
 export default function DashboardPage() {
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [cards, setCards] = useState<CCCard[]>([])
-  const [debts, setDebts] = useState<Debt[]>([])
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [summary, setSummary] = useState<Summary>({ totalIncome: 0, totalExpense: 0, netSavings: 0 })
-  const [fabOpen, setFabOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [plan, setPlan] = useState<Plan | null>(null)
+  const [range, setRange] = useState(90)
+  const [error, setError] = useState('')
 
-  async function load() {
-    const now = new Date()
-    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+  useEffect(() => {
+    setPlan(null); setError('')
+    fetch(`/api/plan?days=${range}`).then(async response => {
+      if (!response.ok) throw new Error((await response.json()).error || 'Unable to load your plan')
+      return response.json()
+    }).then(setPlan).catch(error => setError(error.message))
+  }, [range])
 
-    const [accs, ccs, dts, txs, sum] = await Promise.all([
-      fetch('/api/accounts').then(r => r.json()),
-      fetch('/api/credit-cards').then(r => r.json()),
-      fetch('/api/debts').then(r => r.json()),
-      fetch(`/api/transactions?limit=5`).then(r => r.json()),
-      fetch(`/api/reports/summary?startDate=${start}&endDate=${end}`).then(r => r.json()),
-    ])
-    setAccounts(accs)
-    setCards(ccs)
-    setDebts(dts)
-    setTransactions(txs.transactions || [])
-    setSummary(sum)
-    setLoading(false)
-  }
+  if (error) return <div className="p-4"><Card className="p-5 text-danger">{error}</Card></div>
+  if (!plan) return <div className="flex h-64 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent" /></div>
+  const { summary, items } = plan
+  const isShort = summary.lowestProjectedBalance < summary.cashBuffer
 
-  useEffect(() => { load() }, [])
-
-  const totalBalance = accounts.reduce((s, a) => s + Number(a.balance), 0)
-
-  const formatDate = (d: string) => {
-    const date = new Date(d)
-    const today = new Date()
-    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
-    if (date.toDateString() === today.toDateString()) return 'Today'
-    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
-    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-  }
-
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
-    </div>
-  )
-
-  return (
-    <div className="px-4 py-4 space-y-4">
-      {/* Total Balance Card */}
-      <Card className="p-5 bg-primary text-white border-0">
-        <p className="text-sm text-white/70 mb-1">Total Balance</p>
-        <h2 className="text-3xl font-bold mb-3">
-          <AnimatedAmount value={totalBalance} />
-        </h2>
-        <div className="flex gap-4">
-          <div className="flex items-center gap-1.5">
-            <TrendingUp size={14} className="text-green-300" />
-            <span className="text-sm text-white/80">{formatCurrency(summary.totalIncome)}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <TrendingDown size={14} className="text-red-300" />
-            <span className="text-sm text-white/80">{formatCurrency(summary.totalExpense)}</span>
-          </div>
-        </div>
-      </Card>
-
-      {/* Credit Cards & Pay Later Cards List */}
-      {cards.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 px-1">Cards & Pay Later</h3>
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
-            {cards.map(card => {
-              const daysLeft = card.billDueDate ? Math.ceil((new Date(card.billDueDate.slice(0, 10) + 'T23:59:59').getTime() - Date.now()) / 86400000) : daysUntilDueDate(card.dueDate)
-              return (
-                <Card key={card.id} className="min-w-[240px] p-4 flex-shrink-0">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider mb-0.5">{card.bank} · {card.type === 'PAYLATER' ? 'Pay Later' : 'Card'}</p>
-                      <p className="font-semibold text-sm dark:text-white truncate max-w-[150px]">{card.name}</p>
-                    </div>
-                    <CreditCard size={16} className="text-gray-400" />
-                  </div>
-                  <ProgressBar value={card.usedLimit} max={card.totalLimit} className="mb-2" />
-                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-2">
-                    <span className="tabular-nums">{formatCurrency(card.usedLimit)}</span>
-                    <span className="tabular-nums">{formatCurrency(card.totalLimit)}</span>
-                  </div>
-                  <div className="flex justify-between items-start border-t border-border dark:border-gray-800 pt-2 mt-1">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400">Due</span>
-                      <span className="text-xs font-semibold text-danger tabular-nums">{formatCurrency(card.dueAmount)}</span>
-                    </div>
-                    <div className="flex flex-col"><span className="text-[10px] text-gray-400">Expected</span><span className="text-xs font-semibold">{formatCurrency(card.expectedDue ?? Math.max(0, card.usedLimit))}</span></div>
-                    {card.minimumDue > 0 && (
-                      <div className="flex flex-col items-end">
-                        <span className="text-[10px] text-gray-400">Min Due</span>
-                        <span className="text-xs font-semibold text-warning tabular-nums">{formatCurrency(card.minimumDue)}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-[10px] text-gray-400 mt-2 flex items-center gap-1 justify-center bg-surface-offset dark:bg-gray-800/50 py-1 rounded">
-                    <Clock size={10} />{daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`} (due {card.billDueDate ? new Date(card.billDueDate).toLocaleDateString('en-IN') : `${card.dueDate}th`})
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* This Month Summary */}
-      <Card className="p-4">
-        <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">This Month</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3">
-            <p className="text-xs text-green-700 dark:text-green-400 mb-1">Income</p>
-            <p className="text-lg font-bold text-green-700 dark:text-green-400 tabular-nums">
-              {formatCurrency(summary.totalIncome)}
-            </p>
-          </div>
-          <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-3">
-            <p className="text-xs text-red-700 dark:text-red-400 mb-1">Expenses</p>
-            <p className="text-lg font-bold text-red-700 dark:text-red-400 tabular-nums">
-              {formatCurrency(summary.totalExpense)}
-            </p>
-          </div>
-        </div>
-      </Card>
-
-      {/* Recent Transactions */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 px-1">Recent Transactions</h3>
-        <Card className="divide-y divide-border dark:divide-gray-800">
-          {transactions.length === 0 && (
-            <p className="text-center text-gray-400 py-8 text-sm">No transactions yet</p>
-          )}
-          {transactions.map(tx => (
-            <div key={tx.id} className="flex items-center gap-3 px-4 py-3">
-              <div
-                className="w-9 h-9 rounded-full flex items-center justify-center text-base flex-shrink-0"
-                style={{ backgroundColor: (tx.category?.color ?? '#6b7280') + '20' }}
-              >
-                {tx.category?.icon ?? '💸'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium dark:text-white truncate">{tx.name}</p>
-                <p className="text-xs text-gray-400">{tx.account?.name ?? 'N/A'} · {formatDate(tx.date)}</p>
-              </div>
-              <span className={`text-sm font-semibold tabular-nums flex-shrink-0 ${tx.type === 'INCOME' ? 'text-success' : 'text-danger'}`}>
-                {tx.type === 'INCOME' ? '+' : '-'}{formatCurrency(tx.amount)}
-              </span>
-            </div>
-          ))}
-        </Card>
+  return <div className="mx-auto max-w-3xl space-y-4 px-4 py-4">
+    <section className="rounded-3xl bg-primary p-5 text-white shadow-md">
+      <p className="text-sm text-white/75">Money available to plan</p>
+      <p className="mt-1 text-3xl font-bold tabular-nums">{formatCurrency(summary.safeToSpend)}</p>
+      <p className="mt-1 text-xs text-white/70">Bank balance + expected income − required payments − safety buffer</p>
+      <div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/20 pt-4 text-center">
+        <div><p className="text-[10px] text-white/65">In bank</p><p className="text-sm font-semibold">{formatCurrency(summary.bankBalance)}</p></div>
+        <div><p className="text-[10px] text-white/65">Expected income</p><p className="text-sm font-semibold">{formatCurrency(summary.expectedIncome)}</p></div>
+        <div><p className="text-[10px] text-white/65">Required</p><p className="text-sm font-semibold">{formatCurrency(summary.requiredPayments)}</p></div>
       </div>
+    </section>
 
-      <FAB onClick={() => setFabOpen(true)} />
-      <Sheet open={fabOpen} onClose={() => setFabOpen(false)} title="Add Transaction">
-        <TransactionForm onSuccess={() => { setFabOpen(false); load() }} />
-      </Sheet>
+    {isShort && <Card className="border-danger/30 bg-danger/5 p-4"><div className="flex gap-3"><AlertCircle className="mt-0.5 shrink-0 text-danger" size={19} /><div><p className="font-semibold text-danger">Your plan may fall short</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-300">The projected balance drops to {formatCurrency(summary.lowestProjectedBalance)}. Keep at least {formatCurrency(summary.cashBuffer)} aside, or adjust a payment before its due date.</p></div></div></Card>}
+
+    <div className="grid grid-cols-2 gap-3">
+      <Card className="p-4"><p className="text-xs text-gray-500">Salary & income received</p><p className="mt-1 text-xl font-bold text-success">{formatCurrency(summary.receivedIncome)}</p><Link href="/income" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">Manage income <ArrowRight size={13} /></Link></Card>
+      <Card className="p-4"><p className="text-xs text-gray-500">Safety buffer</p><p className="mt-1 text-xl font-bold">{formatCurrency(summary.cashBuffer)}</p><Link href="/settings" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">Change buffer <ArrowRight size={13} /></Link></Card>
     </div>
-  )
+
+    <div className="flex items-center justify-between px-1"><div><h2 className="font-semibold">Payment flow</h2><p className="text-xs text-gray-500">Income and due payments, in order</p></div><div className="flex rounded-xl bg-surface-offset p-1 dark:bg-gray-800">{[30, 90].map(days => <button key={days} onClick={() => setRange(days)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${range === days ? 'bg-white text-primary shadow-sm dark:bg-gray-700' : 'text-gray-500'}`}>{days}d</button>)}</div></div>
+    <Card className="overflow-hidden divide-y divide-border dark:divide-gray-800">
+      {items.slice(0, 12).map(item => <div key={item.id} className="flex items-center gap-3 px-4 py-3">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${item.kind === 'INCOME' ? 'bg-success/10 text-success' : item.status === 'OVERDUE' ? 'bg-danger/10 text-danger' : 'bg-primary/10 text-primary'}`}>{item.kind === 'INCOME' ? <Landmark size={17} /> : <CalendarDays size={17} />}</div>
+        <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{item.name}</p><p className="text-xs text-gray-500">{dateText(item.date)} · {item.kind === 'INCOME' ? item.status === 'RECEIVED' ? 'received' : 'expected' : item.status === 'OVERDUE' ? 'overdue' : item.isEssential ? 'required' : 'optional'}{item.accountName ? ` · ${item.accountName}` : ''}</p></div>
+        <div className={`text-right text-sm font-bold tabular-nums ${item.kind === 'INCOME' ? 'text-success' : ''}`}><p>{item.kind === 'INCOME' ? '+' : '−'}{formatCurrency(item.kind === 'PAYMENT' ? item.reservedAmount : item.amount)}</p><p className="text-[10px] font-medium text-gray-400">after: {formatCurrency(item.projectedBalance)}</p></div>
+      </div>)}
+      {items.length === 0 && <p className="p-8 text-center text-sm text-gray-500">Add your salary and bills to start building a payment plan.</p>}
+    </Card>
+    <div className="grid grid-cols-2 gap-3"><Link href="/income"><Button className="w-full gap-2"><Landmark size={16} /> Add income</Button></Link><Link href="/bills"><Button variant="outline" className="w-full gap-2"><WalletCards size={16} /> Add bill</Button></Link></div>
+    {items.some(item => item.kind === 'PAYMENT') && <Link href="/bills" className="block px-1 text-center text-sm font-semibold text-primary">View all upcoming payments</Link>}
+  </div>
 }

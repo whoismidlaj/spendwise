@@ -152,3 +152,17 @@ Database integration checks (use a local development database):
 node --test tests/liabilities.integration.cjs
 ```
 These checks create temporary users and remove their data afterward.
+
+## Money planning workflow
+
+1. In **Income**, add each salary or other regular income source using its
+   expected in-hand amount and payday. Gross salary and regular deductions are
+   optional reference values.
+2. In **Bills**, add fixed recurring payments such as utilities, rent,
+   insurance, subscriptions and savings transfers. Existing card statements,
+   EMIs, loans and debt repayments are included in the same plan automatically.
+3. Set a safety buffer in **Settings**. The **Money Plan** home screen uses
+   current account balances, expected income and required payments to calculate
+   safe-to-spend and flag any projected shortfall.
+4. Record income only when it reaches your account. The expected amount is used
+   for future planning; the actual received amount is what changes the balance.

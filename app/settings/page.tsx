@@ -5,7 +5,7 @@ import { signOut } from 'next-auth/react'
 import { User, Lock, Globe, Tag, Trash2, Database, AlertTriangle, Printer, CreditCard, Wallet, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-interface UserProfile { id: string; name: string; email: string; currency: string }
+interface UserProfile { id: string; name: string; email: string; currency: string; cashBuffer: number }
 interface Category { id: string; name: string; icon: string; color: string; type: string; isSystem: boolean }
 interface AccountItem { id: string; name: string; type: string }
 interface CreditCardItem { id: string; name: string; bank: string }
@@ -26,7 +26,7 @@ export default function SettingsPage() {
   const [creditCards, setCreditCards] = useState<CreditCardItem[]>([])
   const [defaultMethodValue, setDefaultMethodValue] = useState<string>('')
   const [defaultMethodMsg, setDefaultMethodMsg] = useState('')
-  const [form, setForm] = useState({ name: '', email: '', currency: 'INR' })
+  const [form, setForm] = useState({ name: '', email: '', currency: 'INR', cashBuffer: '' })
   const [pwForm, setPwForm] = useState({ current: '', new: '', confirm: '' })
   const [catForm, setCatForm] = useState({ name: '', icon: '📌', color: '#6b7280', type: 'EXPENSE' })
   const [loading, setLoading] = useState(false)
@@ -48,7 +48,7 @@ export default function SettingsPage() {
       fetch('/api/credit-cards').then(r => r.json()),
     ])
     setProfile(user)
-    setForm({ name: user.name ?? '', email: user.email ?? '', currency: user.currency ?? 'INR' })
+    setForm({ name: user.name ?? '', email: user.email ?? '', currency: user.currency ?? 'INR', cashBuffer: String(user.cashBuffer ?? 0) })
     setCategories(cats || [])
     setAccounts(accs || [])
     setCreditCards(cards || [])
@@ -88,7 +88,7 @@ export default function SettingsPage() {
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setMsg('')
-    await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, email: form.email, currency: form.currency }) })
+    await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, email: form.email, currency: form.currency, cashBuffer: Number(form.cashBuffer || 0) }) })
     setMsg('Profile saved!'); setLoading(false)
   }
 
@@ -187,6 +187,8 @@ export default function SettingsPage() {
               {CURRENCIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
           </div>
+          <Input id="cash-buffer" label="Safety buffer" type="number" min="0" step="0.01" value={form.cashBuffer} onChange={e => setForm(f => ({ ...f, cashBuffer: e.target.value }))} />
+          <p className="text-xs text-gray-500">The payment plan keeps this amount aside before showing money as safe to spend.</p>
           {msg && <p className="text-xs text-success">{msg}</p>}
           <Button type="submit" loading={loading}>Save Profile</Button>
         </form>
@@ -476,4 +478,3 @@ export default function SettingsPage() {
     </div>
   )
 }
-

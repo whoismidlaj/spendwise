@@ -10,7 +10,7 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, name: true, email: true, currency: true, createdAt: true },
+    select: { id: true, name: true, email: true, currency: true, cashBuffer: true, createdAt: true },
   })
 
   return NextResponse.json(toJson(user))
@@ -21,7 +21,7 @@ export async function PATCH(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { name, email, currency, currentPassword, newPassword } = body
+  const { name, email, currency, cashBuffer, currentPassword, newPassword } = body
 
   const user = await prisma.user.findUnique({ where: { id: session.user.id } })
   if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -30,6 +30,10 @@ export async function PATCH(req: NextRequest) {
   if (name !== undefined) updateData.name = name
   if (email !== undefined) updateData.email = email
   if (currency !== undefined) updateData.currency = currency
+  if (cashBuffer !== undefined) {
+    if (typeof cashBuffer !== 'number' || !Number.isFinite(cashBuffer) || cashBuffer < 0) return NextResponse.json({ error: 'Cash buffer must be a positive amount' }, { status: 400 })
+    updateData.cashBuffer = cashBuffer
+  }
 
   if (newPassword) {
     if (!currentPassword) return NextResponse.json({ error: 'Current password required' }, { status: 400 })
@@ -41,7 +45,7 @@ export async function PATCH(req: NextRequest) {
   const updated = await prisma.user.update({
     where: { id: session.user.id },
     data: updateData,
-    select: { id: true, name: true, email: true, currency: true },
+    select: { id: true, name: true, email: true, currency: true, cashBuffer: true },
   })
 
   return NextResponse.json(toJson(updated))

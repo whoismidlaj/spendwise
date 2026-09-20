@@ -1,20 +1,22 @@
 'use client'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutDashboard, Wallet, ArrowLeftRight, RefreshCcw, BarChart3, Coins } from 'lucide-react'
+import { LayoutDashboard, Wallet, ArrowLeftRight, BarChart3, Coins } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { cn } from '@/lib/utils'
 
 const tabs = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/dashboard', icon: LayoutDashboard, label: 'Plan' },
+  { href: '/bills', icon: Coins, label: 'Bills' },
   { href: '/accounts', icon: Wallet, label: 'Accounts' },
   { href: '/transactions', icon: ArrowLeftRight, label: 'Transactions' },
-  { href: '/debts', icon: Coins, label: 'Debts' },
   { href: '/reports', icon: BarChart3, label: 'Reports' },
 ]
 
 const pageTitles: Record<string, string> = {
-  '/dashboard': 'Dashboard',
+  '/dashboard': 'Money Plan',
+  '/income': 'Income',
+  '/bills': 'Bills',
   '/accounts': 'Accounts',
   '/transactions': 'Transactions',
   '/expenses': 'Expenses & EMIs',

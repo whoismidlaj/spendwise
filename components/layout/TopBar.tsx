@@ -91,10 +91,12 @@ export function TopBar({ title }: TopBarProps) {
             </div>
             {[
               { href: '/dashboard', label: 'Dashboard', icon: '📊' },
+              { href: '/income', label: 'Income & Salary', icon: '💵' },
+              { href: '/bills', label: 'Bills & Payment Plan', icon: '🗓️' },
               { href: '/accounts', label: 'Accounts & Cards', icon: '💳' },
               { href: '/transactions', label: 'Transactions', icon: '💸' },
               { href: '/expenses', label: 'Recurring Expenses', icon: '🔄' },
-              { href: '/debts', label: 'Debts Tracker', icon: '📉' },
+              { href: '/debts', label: 'Loans & Lending', icon: '📉' },
               { href: '/reports', label: 'Reports & Trends', icon: '📈' },
               { href: '/settings', label: 'App Settings', icon: '⚙️' },
             ].map((item) => (

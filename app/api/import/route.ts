@@ -10,11 +10,16 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id
 
   try {
-    const { accounts, creditCards, categories, debts, transactions } = await req.json()
+    const { accounts, creditCards, categories, debts, transactions, recurringExpenses, budgets, incomeSources, paymentPlans } = await req.json()
 
     await prisma.$transaction(async (tx) => {
       // 1. Clean existing records in correct order to avoid reference conflicts
       await tx.budget.deleteMany({ where: { userId } })
+      await tx.paymentPlanOccurrence.deleteMany({ where: { paymentPlan: { userId } } })
+      await tx.paymentPlan.deleteMany({ where: { userId } })
+      await tx.incomeOccurrence.deleteMany({ where: { incomeSource: { userId } } })
+      await tx.incomeSource.deleteMany({ where: { userId } })
+      await tx.eMIPayment.deleteMany({ where: { recurringExpense: { userId } } })
       await tx.transaction.deleteMany({ where: { userId } })
       await tx.recurringExpense.deleteMany({ where: { userId } })
       await tx.debt.deleteMany({ where: { userId } })
@@ -112,7 +117,46 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 6. Import Transactions
+      // 6. Import recurring schedules, income sources and planned bills.
+      if (recurringExpenses && Array.isArray(recurringExpenses)) {
+        for (const item of recurringExpenses) {
+          await tx.recurringExpense.create({ data: {
+            id: item.id, userId, accountId: item.accountId || null, name: item.name, type: item.type,
+            loanAmount: item.loanAmount, interestRate: item.interestRate, additionalFees: item.additionalFees,
+            emiAmount: item.emiAmount, emiDate: item.emiDate, totalEMIs: item.totalEMIs,
+            paidEMIs: item.paidEMIs || 0, startDate: new Date(item.startDate), isActive: item.isActive ?? true,
+            payments: Array.isArray(item.payments) ? { create: item.payments.map((payment: any) => ({ amount: payment.amount, paidDate: new Date(payment.paidDate), emiNumber: payment.emiNumber })) } : undefined,
+          } })
+        }
+      }
+      if (incomeSources && Array.isArray(incomeSources)) {
+        for (const source of incomeSources) {
+          await tx.incomeSource.create({ data: {
+            id: source.id, userId, accountId: source.accountId || null, name: source.name, type: source.type,
+            frequency: source.frequency, payday: source.payday, grossAmount: source.grossAmount,
+            expectedInHand: source.expectedInHand, defaultDeductions: source.defaultDeductions || 0, isActive: source.isActive ?? true,
+            occurrences: Array.isArray(source.occurrences) ? { create: source.occurrences.map((item: any) => ({ expectedDate: new Date(item.expectedDate), expectedAmount: item.expectedAmount, actualAmount: item.actualAmount, receivedAt: item.receivedAt ? new Date(item.receivedAt) : null, status: item.status, notes: item.notes })) } : undefined,
+          } })
+        }
+      }
+      if (paymentPlans && Array.isArray(paymentPlans)) {
+        for (const plan of paymentPlans) {
+          await tx.paymentPlan.create({ data: {
+            id: plan.id, userId, accountId: plan.accountId || null, name: plan.name, type: plan.type,
+            amount: plan.amount, dueDay: plan.dueDay, isEssential: plan.isEssential ?? true, isActive: plan.isActive ?? true,
+            startDate: new Date(plan.startDate), notes: plan.notes,
+            payments: Array.isArray(plan.payments) ? { create: plan.payments.map((item: any) => ({ dueDate: new Date(item.dueDate), amount: item.amount, paidAt: item.paidAt ? new Date(item.paidAt) : null, accountId: item.accountId || null })) } : undefined,
+          } })
+        }
+      }
+
+      if (budgets && Array.isArray(budgets)) {
+        for (const budget of budgets) {
+          await tx.budget.create({ data: { id: budget.id, userId, categoryId: budget.categoryId, amount: budget.amount, month: budget.month, year: budget.year } })
+        }
+      }
+
+      // 7. Import Transactions
       if (transactions && Array.isArray(transactions)) {
         for (const t of transactions) {
           await tx.transaction.create({

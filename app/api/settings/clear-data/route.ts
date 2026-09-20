@@ -34,7 +34,11 @@ export async function POST(req: NextRequest) {
 
   try {
     await prisma.$transaction(async (tx) => {
-      // 1. Delete dependent payments and transactions
+      // 1. Delete dependent payment and planning records before their accounts.
+      await tx.paymentPlanOccurrence.deleteMany({ where: { paymentPlan: { userId } } })
+      await tx.paymentPlan.deleteMany({ where: { userId } })
+      await tx.incomeOccurrence.deleteMany({ where: { incomeSource: { userId } } })
+      await tx.incomeSource.deleteMany({ where: { userId } })
       await tx.eMIPayment.deleteMany({ where: { recurringExpense: { userId } } })
       await tx.recurringExpense.deleteMany({ where: { userId } })
       await tx.debtPayment.deleteMany({ where: { debt: { userId } } })
