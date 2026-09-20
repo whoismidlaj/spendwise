@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1)
   const period = new URL(req.url).searchParams.get('period') === 'next' ? 'next' : 'month'
@@ -56,14 +57,14 @@ export async function GET(req: NextRequest) {
       const date = monthDate(year, month, plan.dueDay)
       if (date < generationStart || date > end || date < plan.startDate) continue
       if (plan.payments.some(payment => dateKey(new Date(payment.dueDate)) === dateKey(date) && payment.paidAt)) continue
-      items.push({ id: `plan-${plan.id}-${dateKey(date)}`, date, name: plan.name, kind: 'PAYMENT', source: plan.type, amount: Number(plan.amount), reservedAmount: plan.isEssential ? Number(plan.amount) : 0, isEssential: plan.isEssential, status: date < now ? 'OVERDUE' : 'EXPECTED', accountName: plan.account?.name })
+      items.push({ id: `plan-${plan.id}-${dateKey(date)}`, date, name: plan.name, kind: 'PAYMENT', source: plan.type, amount: Number(plan.amount), reservedAmount: plan.isEssential ? Number(plan.amount) : 0, isEssential: plan.isEssential, status: date < todayStart ? 'OVERDUE' : 'EXPECTED', accountName: plan.account?.name })
     }
   }
   for (const debt of debts) {
     if (!debt.isRecurring || !debt.paymentDate || !debt.paymentAmount) {
       if (debt.deadline && debt.deadline <= end && Number(debt.remaining) > 0) {
         const amount = Number(debt.remaining)
-        items.push({ id: `debt-deadline-${debt.id}`, date: debt.deadline, name: debt.name, kind: 'PAYMENT', source: 'DEBT', amount, reservedAmount: amount, isEssential: true, status: debt.deadline < now ? 'OVERDUE' : 'EXPECTED' })
+        items.push({ id: `debt-deadline-${debt.id}`, date: debt.deadline, name: debt.name, kind: 'PAYMENT', source: 'DEBT', amount, reservedAmount: amount, isEssential: true, status: debt.deadline < todayStart ? 'OVERDUE' : 'EXPECTED' })
       }
       continue
     }
@@ -71,13 +72,18 @@ export async function GET(req: NextRequest) {
       const date = monthDate(year, month, debt.paymentDate)
       if (date < generationStart || date > end || debt.payments.some(payment => new Date(payment.paidDate).getFullYear() === year && new Date(payment.paidDate).getMonth() === month)) continue
       const amount = Math.min(Number(debt.paymentAmount), Number(debt.remaining))
-      items.push({ id: `debt-${debt.id}-${dateKey(date)}`, date, name: debt.name, kind: 'PAYMENT', source: 'DEBT', amount, reservedAmount: amount, isEssential: true, status: date < now ? 'OVERDUE' : 'EXPECTED' })
+      items.push({ id: `debt-${debt.id}-${dateKey(date)}`, date, name: debt.name, kind: 'PAYMENT', source: 'DEBT', amount, reservedAmount: amount, isEssential: true, status: date < todayStart ? 'OVERDUE' : 'EXPECTED' })
     }
   }
   for (const card of cards) {
-    if (Number(card.dueAmount) <= 0) continue
-    const date = card.billDueDate ?? monthDate(now.getFullYear(), now.getMonth(), card.dueDate)
-    if (date <= end) items.push({ id: `card-${card.id}`, date, name: `${card.bank} ${card.name}`, kind: 'PAYMENT', source: card.type === 'PAYLATER' ? 'PAY_LATER' : 'CARD', amount: Number(card.dueAmount), reservedAmount: Number(card.minimumDue) || Number(card.dueAmount), isEssential: true, status: date < now ? 'OVERDUE' : 'EXPECTED' })
+    const actualDue = Number(card.dueAmount)
+    const estimatedDue = Number(card.expectedDue ?? card.usedLimit)
+    const amount = actualDue > 0 ? actualDue : estimatedDue
+    if (amount <= 0) continue
+    const currentDueDate = monthDate(now.getFullYear(), now.getMonth(), card.dueDate)
+    const estimatedDate = currentDueDate < todayStart ? monthDate(now.getFullYear(), now.getMonth() + 1, card.dueDate) : currentDueDate
+    const date = card.billDueDate ?? (actualDue > 0 ? currentDueDate : estimatedDate)
+    if (date <= end) items.push({ id: `card-${card.id}`, date, name: `${card.bank} ${card.name}`, kind: 'PAYMENT', source: card.type === 'PAYLATER' ? 'PAY_LATER' : 'CARD', amount, reservedAmount: actualDue > 0 ? Number(card.minimumDue) || actualDue : estimatedDue, isEssential: true, status: date < todayStart ? 'OVERDUE' : 'EXPECTED' })
   }
   items.sort((a, b) => a.date.getTime() - b.date.getTime() || (a.kind === 'PAYMENT' ? -1 : 1))
   const selectedItems = period === 'next' ? items.filter(item => item.date >= start) : items

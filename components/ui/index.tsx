@@ -266,7 +266,8 @@ export function FAB({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="fixed right-4 z-40 w-14 h-14 bg-primary hover:bg-primary-hover active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center text-3xl font-light transition-all"
       style={{ bottom: 'calc(env(safe-area-inset-bottom) + 72px)' }}
-      aria-label="Add"
+      aria-label="Add payment or transfer"
+      title="Add payment or transfer"
     >
       +
     </button>

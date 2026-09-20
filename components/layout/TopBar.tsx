@@ -91,8 +91,9 @@ export function TopBar({ title }: TopBarProps) {
             </div>
             {[
               { href: '/dashboard', label: 'Money Plan', icon: '📊' },
-              { href: '/bills', label: 'Bills', icon: '🗓️' },
+              { href: '/bills', label: 'Recurring Payments', icon: '🗓️' },
               { href: '/accounts', label: 'Accounts & Cards', icon: '💳' },
+              { href: '/transactions', label: 'Transaction History', icon: '🧾' },
               { href: '/debts', label: 'Loans & Lending', icon: '📉' },
               { href: '/income', label: 'Income & Salary', icon: '💵' },
               { href: '/settings', label: 'App Settings', icon: '⚙️' },

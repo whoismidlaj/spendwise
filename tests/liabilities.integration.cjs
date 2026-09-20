@@ -27,6 +27,7 @@ const receiveIncome = require('../app/api/income-sources/[id]/receive/route')
 const paymentPlans = require('../app/api/payment-plans/route')
 const payPaymentPlan = require('../app/api/payment-plans/[id]/pay/route')
 const plan = require('../app/api/plan/route')
+const transactions = require('../app/api/transactions/route')
 const { buildLoanSchedule } = require('../lib/loan-schedule')
 function request(body, method = 'POST') {
   return new NextRequest('http://localhost/api/test', { method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
@@ -47,6 +48,33 @@ test('variable bills, usage, repayments and lending remain consistent', async t 
     otherUser = await prisma.user.create({ data: { email: `test-other-${Date.now()}@example.invalid`, password: 'unused' } })
     const foreignAccount = await prisma.account.create({ data: { userId: otherUser.id, name: 'Other bank' } })
     let card, lent
+    await t.test('quick payments and transfers adjust balances and card estimates atomically', async () => {
+      const source = await prisma.account.create({ data: { userId, name: 'Quick source', balance: 1000 } })
+      const destination = await prisma.account.create({ data: { userId, name: 'Quick destination', balance: 50 } })
+      const quickCard = await prisma.creditCard.create({ data: {
+        userId, name: 'Quick card', bank: 'Test bank', totalLimit: 5000, usedLimit: 100,
+        expectedDue: 100, dueAmount: 0, minimumDue: 0, dueDate: 20, statementDate: 5,
+      } })
+
+      await json(await transactions.POST(request({ mode: 'PAYMENT', amount: 100, name: 'Groceries', date: '2026-09-20', occurredAt: '2026-09-20T14:35:00.000Z', accountId: source.id })), 201)
+      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 900)
+
+      await json(await transactions.POST(request({ mode: 'PAYMENT', amount: 25, name: 'Hosting', date: '2026-09-20', creditCardId: quickCard.id })), 201)
+      const cardAfterPurchase = await prisma.creditCard.findUnique({ where: { id: quickCard.id } })
+      assert.equal(Number(cardAfterPurchase.usedLimit), 125)
+      assert.equal(Number(cardAfterPurchase.expectedDue), 125)
+      assert.equal(Number(cardAfterPurchase.dueAmount), 0)
+      assert.equal(Number(cardAfterPurchase.minimumDue), 0)
+
+      await json(await transactions.POST(request({ mode: 'TRANSFER', amount: 200, name: 'Move to savings', date: '2026-09-20', accountId: source.id, toAccountId: destination.id })), 201)
+      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 700)
+      assert.equal(Number((await prisma.account.findUnique({ where: { id: destination.id } })).balance), 250)
+      await json(await transactions.POST(request({ mode: 'PAYMENT', amount: 10, name: 'Invalid', date: '2026-09-20', accountId: source.id, creditCardId: quickCard.id })), 400)
+      const history = await json(await transactions.GET(new NextRequest('http://localhost/api/transactions?limit=20')))
+      assert.ok(history.transactions.some(item => item.name === 'Groceries' && item.account?.name === 'Quick source' && item.date === '2026-09-20T14:35:00.000Z'))
+      assert.ok(history.transactions.some(item => item.name === 'Hosting' && item.creditCard?.name === 'Quick card'))
+      assert.ok(history.transactions.some(item => item.name === 'Move to savings' && item.toAccount?.name === 'Quick destination'))
+    })
     await t.test('pay later accepts a usage estimate and separate bill/minimum', async () => {
       card = await json(await cards.POST(request({ name: 'Pay Later', bank: 'Provider', type: 'PAYLATER', totalLimit: 5000, usedLimit: 500, dueAmount: 200, minimumDue: 50, dueDate: 20, statementDate: 5, billDueDate: '2026-09-20' })), 201)
       assert.equal(card.expectedDue, null)

@@ -141,8 +141,11 @@ prisma/
   an existing balance without changing an account. Repayments debit or credit
   the selected account; principal repayments are transfers rather than income
   or expenses. Settled repayments remain in payment history.
-- Managed payments use a private balance ledger so account totals stay
-  auditable. The app has no manual transaction or reporting screens.
+- The floating action button on **Money Plan** records a simple bank payment,
+  card purchase or account transfer. It updates account balances and card usage
+  immediately. **Transaction History** provides a view-only activity list.
+- Managed payments and quick entries share a private balance ledger so account
+  totals stay auditable.
 
 Database integration checks (use a local development database):
 ```bash
@@ -155,8 +158,8 @@ These checks create temporary users and remove their data afterward.
 1. In **Income**, add each salary or other regular income source using its
    expected in-hand amount and payday. Gross salary and regular deductions are
    optional reference values.
-2. In **Bills**, add fixed recurring payments such as utilities, rent,
-   insurance, subscriptions and savings transfers. Existing card statements,
+2. In **Recurring Payments**, add home contributions, utilities, subscriptions,
+   hosting, insurance and savings transfers. Existing card statements,
    EMIs, loans and debt repayments are included in the same plan automatically.
 3. Set a safety buffer in **Settings**. The **Money Plan** home screen uses
    current account balances, expected income and required payments to calculate

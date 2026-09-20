@@ -1,8 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { formatCurrency } from '@/lib/currency'
 import { Card, Button, Sheet, Input, Select, Badge, ProgressBar } from '@/components/ui'
-import { Plus, ChevronDown, Edit2, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Edit2, HandCoins, Plus, ReceiptText, Trash2 } from 'lucide-react'
 import { CardPaymentForm } from '@/components/CardPaymentForm'
 import { InstitutionLogo } from '@/components/InstitutionLogo'
 import { INSTITUTIONS, InstitutionId, inferInstitution } from '@/lib/institutions'
@@ -10,6 +11,8 @@ import { cn } from '@/lib/utils'
 
 interface Account { id: string; name: string; type: string; balance: number; color: string; institution: InstitutionId }
 interface CreditCard { id: string; name: string; bank: string; institution: InstitutionId; totalLimit: number; usedLimit: number; dueAmount: number; minimumDue: number; expectedDue: number | null; billDueDate: string | null; dueDate: number; statementDate: number; color: string; type: 'CARD' | 'PAYLATER' }
+interface BillSummary { id: string; amount: number }
+interface DebtSummary { id: string; direction: 'BORROWED' | 'LENT'; isActive: boolean; isRecurring: boolean; paymentAmount?: number }
 
 const COLORS = ['#01696f', '#006494', '#5f259f', '#dc2626', '#d97706', '#16a34a']
 const CARD_COLORS = ['#1a1a2e', '#003087', '#8b0000', '#1b4332', '#1e3a5f', '#2d1b69']
@@ -136,13 +139,20 @@ export default function AccountsPage() {
   const [tab, setTab] = useState<'accounts' | 'cards'>('accounts')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [cards, setCards] = useState<CreditCard[]>([])
+  const [bills, setBills] = useState<BillSummary[]>([])
+  const [debts, setDebts] = useState<DebtSummary[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [sheet, setSheet] = useState<{ type: 'account' | 'card'; edit?: Account | CreditCard } | null>(null)
   const [mounted, setMounted] = useState(false)
 
   async function load() {
-    const [a, c] = await Promise.all([fetch('/api/accounts').then(r => r.json()), fetch('/api/credit-cards').then(r => r.json())])
-    setAccounts(a); setCards(c)
+    const [a, c, b, d] = await Promise.all([
+      fetch('/api/accounts').then(r => r.json()),
+      fetch('/api/credit-cards').then(r => r.json()),
+      fetch('/api/payment-plans').then(r => r.json()),
+      fetch('/api/debts').then(r => r.json()),
+    ])
+    setAccounts(a); setCards(c); setBills(b); setDebts(d)
   }
 
   useEffect(() => {
@@ -159,6 +169,10 @@ export default function AccountsPage() {
     if (!confirm('Delete this card?')) return
     await fetch(`/api/credit-cards/${id}`, { method: 'DELETE' }); load()
   }
+
+  const monthlyBills = bills.reduce((total, bill) => total + Number(bill.amount), 0)
+  const activeDebts = debts.filter(debt => debt.isActive)
+  const monthlyLoans = activeDebts.filter(debt => debt.direction === 'BORROWED' && debt.isRecurring).reduce((total, debt) => total + Number(debt.paymentAmount || 0), 0)
 
   return (
     <div className="mx-auto max-w-3xl px-3 py-3 sm:px-4 sm:py-4">
@@ -272,6 +286,14 @@ export default function AccountsPage() {
           })}
         </div>
       )}
+
+      <section className="mt-5 space-y-2.5">
+        <div className="px-1"><h2 className="text-sm font-semibold">Commitments</h2><p className="text-xs text-gray-500">Regular payments, loans, and money lent</p></div>
+        <div className="grid grid-cols-2 gap-2.5">
+          <Link href="/bills" className="min-w-0"><Card className="h-full p-3.5"><div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><ReceiptText size={18} /></div><p className="truncate text-sm font-semibold">Recurring payments</p><p className="mt-0.5 truncate text-[11px] text-gray-500">Home, subscriptions, bills</p><div className="mt-3 flex items-end justify-between gap-1"><div className="min-w-0"><p className="truncate text-sm font-bold">{formatCurrency(monthlyBills)}</p><p className="text-[10px] text-gray-400">{bills.length} monthly</p></div><ChevronRight size={16} className="shrink-0 text-gray-400" /></div></Card></Link>
+          <Link href="/debts" className="min-w-0"><Card className="h-full p-3.5"><div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><HandCoins size={18} /></div><p className="truncate text-sm font-semibold">Loans & lending</p><p className="mt-0.5 truncate text-[11px] text-gray-500">EMIs, debts, money lent</p><div className="mt-3 flex items-end justify-between gap-1"><div className="min-w-0"><p className="truncate text-sm font-bold">{formatCurrency(monthlyLoans)}</p><p className="text-[10px] text-gray-400">{activeDebts.length} active</p></div><ChevronRight size={16} className="shrink-0 text-gray-400" /></div></Card></Link>
+        </div>
+      </section>
 
       <Sheet open={!!payCard} onClose={() => setPayCard(null)} title={`Pay ${payCard?.name ?? 'card'}`}>
         {payCard && <CardPaymentForm card={payCard} accounts={accounts} onSuccess={() => { setPayCard(null); load() }} />}

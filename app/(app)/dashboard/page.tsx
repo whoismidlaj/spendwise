@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { AlertCircle, ArrowRight, CalendarDays, Landmark, WalletCards } from 'lucide-react'
-import { Card, Button } from '@/components/ui'
+import { Button, Card, FAB, Sheet } from '@/components/ui'
 import { formatCurrency } from '@/lib/currency'
+import { QuickTransactionForm } from '@/components/QuickTransactionForm'
 
 type PlanItem = {
   id: string; name: string; date: string; kind: 'INCOME' | 'PAYMENT'; source: string
@@ -20,6 +21,8 @@ export default function DashboardPage() {
   const [plan, setPlan] = useState<Plan | null>(null)
   const [period, setPeriod] = useState<'month' | 'next'>('month')
   const [error, setError] = useState('')
+  const [quickEntryOpen, setQuickEntryOpen] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     setPlan(null); setError('')
@@ -27,7 +30,7 @@ export default function DashboardPage() {
       if (!response.ok) throw new Error((await response.json()).error || 'Unable to load your plan')
       return response.json()
     }).then(setPlan).catch(error => setError(error.message))
-  }, [period])
+  }, [period, refreshKey])
 
   if (error) return <div className="p-4"><Card className="p-5 text-danger">{error}</Card></div>
   if (!plan) return <div className="flex h-64 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent" /></div>
@@ -63,5 +66,9 @@ export default function DashboardPage() {
       {items.length === 0 && <p className="p-8 text-center text-sm text-gray-500">Add your salary and bills to start building a payment plan.</p>}
     </Card>
     <div className="grid grid-cols-2 gap-3"><Link href="/income"><Button className="w-full gap-2"><Landmark size={16} /> Add income</Button></Link><Link href="/bills"><Button variant="outline" className="w-full gap-2"><WalletCards size={16} /> Add bill</Button></Link></div>
+    <FAB onClick={() => setQuickEntryOpen(true)} />
+    <Sheet open={quickEntryOpen} onClose={() => setQuickEntryOpen(false)} title="Quick payment">
+      <QuickTransactionForm onSuccess={() => { setQuickEntryOpen(false); setRefreshKey(value => value + 1) }} />
+    </Sheet>
   </div>
 }
