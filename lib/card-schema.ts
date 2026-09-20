@@ -1,8 +1,10 @@
 import { z } from 'zod'
+import { INSTITUTION_IDS } from './institutions'
 
 export const cardSchema = z.object({
   name: z.string().min(1),
   bank: z.string().min(1),
+  institution: z.enum(INSTITUTION_IDS).default('OTHER'),
   totalLimit: z.number().finite().multipleOf(0.01).positive(),
   usedLimit: z.number().finite().multipleOf(0.01).min(0).default(0),
   dueAmount: z.number().finite().multipleOf(0.01).min(0).default(0),

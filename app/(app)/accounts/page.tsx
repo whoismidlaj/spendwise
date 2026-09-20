@@ -4,10 +4,12 @@ import { formatCurrency } from '@/lib/currency'
 import { Card, Button, Sheet, Input, Select, Badge, ProgressBar } from '@/components/ui'
 import { Plus, ChevronDown, Edit2, Trash2 } from 'lucide-react'
 import { CardPaymentForm } from '@/components/CardPaymentForm'
+import { InstitutionLogo } from '@/components/InstitutionLogo'
+import { INSTITUTIONS, InstitutionId, inferInstitution } from '@/lib/institutions'
 import { cn } from '@/lib/utils'
 
-interface Account { id: string; name: string; type: string; balance: number; color: string }
-interface CreditCard { id: string; name: string; bank: string; totalLimit: number; usedLimit: number; dueAmount: number; minimumDue: number; expectedDue: number | null; billDueDate: string | null; dueDate: number; statementDate: number; color: string; type: 'CARD' | 'PAYLATER' }
+interface Account { id: string; name: string; type: string; balance: number; color: string; institution: InstitutionId }
+interface CreditCard { id: string; name: string; bank: string; institution: InstitutionId; totalLimit: number; usedLimit: number; dueAmount: number; minimumDue: number; expectedDue: number | null; billDueDate: string | null; dueDate: number; statementDate: number; color: string; type: 'CARD' | 'PAYLATER' }
 
 const COLORS = ['#01696f', '#006494', '#5f259f', '#dc2626', '#d97706', '#16a34a']
 const CARD_COLORS = ['#1a1a2e', '#003087', '#8b0000', '#1b4332', '#1e3a5f', '#2d1b69']
@@ -17,6 +19,7 @@ function AccountForm({ onSuccess, initial }: { onSuccess: () => void; initial?: 
   const [type, setType] = useState(initial?.type ?? 'BANK')
   const [balance, setBalance] = useState(String(initial?.balance ?? ''))
   const [color, setColor] = useState(initial?.color ?? COLORS[0])
+  const [institution, setInstitution] = useState<InstitutionId>(initial?.institution ?? inferInstitution(initial?.name))
   const [loading, setLoading] = useState(false)
 
   async function submit(e: React.FormEvent) {
@@ -24,7 +27,7 @@ function AccountForm({ onSuccess, initial }: { onSuccess: () => void; initial?: 
     setLoading(true)
     const url = initial ? `/api/accounts/${initial.id}` : '/api/accounts'
     const method = initial ? 'PATCH' : 'POST'
-    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, type, balance: parseFloat(balance), color }) })
+    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, type, balance: parseFloat(balance) || 0, color, institution }) })
     setLoading(false); onSuccess()
   }
 
@@ -35,6 +38,9 @@ function AccountForm({ onSuccess, initial }: { onSuccess: () => void; initial?: 
         <option value="BANK">Bank Account</option>
         <option value="WALLET">Wallet</option>
         <option value="CASH">Cash</option>
+      </Select>
+      <Select id="account-institution" label="Bank / provider" value={institution} onChange={e => setInstitution(e.target.value as InstitutionId)}>
+        {Object.entries(INSTITUTIONS).filter(([, item]) => item.account).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}
       </Select>
       {!initial && <Input label="Opening Balance" type="number" value={balance} onChange={e => setBalance(e.target.value)} placeholder="0" />}
       <div>
@@ -54,7 +60,7 @@ function AccountForm({ onSuccess, initial }: { onSuccess: () => void; initial?: 
 
 function CreditCardForm({ onSuccess, initial }: { onSuccess: () => void; initial?: CreditCard }) {
   const [form, setForm] = useState({
-    name: initial?.name ?? '', bank: initial?.bank ?? '',
+    name: initial?.name ?? '', bank: initial?.bank ?? '', institution: initial?.institution ?? inferInstitution(initial?.bank),
     totalLimit: String(initial?.totalLimit ?? ''), usedLimit: String(initial?.usedLimit ?? ''),
     dueAmount: String(initial?.dueAmount ?? ''), minimumDue: String(initial?.minimumDue ?? ''),
     expectedDue: String(initial?.expectedDue ?? ''), billDueDate: initial?.billDueDate?.slice(0, 10) ?? '',
@@ -89,6 +95,12 @@ function CreditCardForm({ onSuccess, initial }: { onSuccess: () => void; initial
       <Select id="card-type" label="Type" value={form.type} onChange={(e) => setForm(p => ({ ...p, type: e.target.value as any }))}>
         <option value="CARD">Credit Card</option>
         <option value="PAYLATER">Pay Later</option>
+      </Select>
+      <Select id="card-institution" label="Card / provider" value={form.institution} onChange={(e) => setForm(p => {
+        const institution = e.target.value as InstitutionId
+        return { ...p, institution, bank: institution === 'OTHER' ? p.bank : INSTITUTIONS[institution].label }
+      })}>
+        {Object.entries(INSTITUTIONS).filter(([, item]) => item.card).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}
       </Select>
       <Input id="card-name" label={form.type === 'PAYLATER' ? "Account Name" : "Card Name"} value={form.name} onChange={f('name')} placeholder={form.type === 'PAYLATER' ? "e.g. Amazon Pay Later" : "e.g. HDFC Millennia"} required />
       <Input id="card-bank" label={form.type === 'PAYLATER' ? "Provider" : "Bank"} value={form.bank} onChange={f('bank')} placeholder={form.type === 'PAYLATER' ? "e.g. Amazon" : "e.g. HDFC Bank"} required />
@@ -169,10 +181,10 @@ export default function AccountsPage() {
           {accounts.map(acc => (
             <Card key={acc.id} className="overflow-hidden">
               <button className="w-full flex items-center gap-3 p-4" onClick={() => setExpanded(expanded === acc.id ? null : acc.id)}>
-                <div className="w-10 h-10 rounded-xl flex-shrink-0" style={{ backgroundColor: acc.color }} />
+                <InstitutionLogo institution={acc.institution} />
                 <div className="flex-1 text-left">
                   <p className="font-medium dark:text-white">{acc.name}</p>
-                  <Badge className="mt-0.5 text-gray-500 dark:text-gray-400 bg-surface-offset dark:bg-gray-800">{acc.type}</Badge>
+                  <Badge className="mt-0.5 text-gray-500 dark:text-gray-400 bg-surface-offset dark:bg-gray-800">{INSTITUTIONS[acc.institution]?.label || acc.type}</Badge>
                 </div>
                 <div className="text-right">
                   <p className="font-bold tabular-nums dark:text-white">{formatCurrency(acc.balance)}</p>
@@ -206,8 +218,9 @@ export default function AccountsPage() {
               <Card key={card.id} className="overflow-hidden">
                 <div className="p-4">
                   <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1">
+                    <div className="flex gap-2.5">
+                      <InstitutionLogo institution={card.institution} size={36} />
+                      <div><div className="flex items-center gap-1.5 mb-1">
                         <p className="text-xs text-gray-500 dark:text-gray-400">{card.bank}</p>
                         <Badge className="bg-surface-offset dark:bg-gray-800 text-[9px] text-gray-500 dark:text-gray-400 font-medium px-1.5 py-0.5 rounded">
                           {card.type === 'PAYLATER' ? 'Pay Later' : 'Credit Card'}
@@ -221,7 +234,7 @@ export default function AccountsPage() {
                         {card.usedLimit > card.totalLimit && (
                           <Badge className="bg-warning/10 text-warning dark:bg-warning/20 text-[10px] font-semibold uppercase tracking-wider py-0.5 px-2">Over Limit</Badge>
                         )}
-                      </div>
+                      </div></div>
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => setSheet({ type: 'card', edit: card })} className="p-2 hover:bg-surface-offset dark:hover:bg-gray-800 rounded-lg">

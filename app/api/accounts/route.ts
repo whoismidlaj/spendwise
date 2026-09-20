@@ -3,12 +3,14 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
 import { z } from 'zod'
+import { INSTITUTION_IDS } from '@/lib/institutions'
 
-const accountSchema = z.object({
+export const accountSchema = z.object({
   name: z.string().min(1),
   type: z.enum(['BANK', 'WALLET', 'CASH']),
   balance: z.number().default(0),
   color: z.string().default('#01696f'),
+  institution: z.enum(INSTITUTION_IDS).default('OTHER'),
 })
 
 export async function GET() {

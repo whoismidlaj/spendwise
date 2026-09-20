@@ -34,6 +34,7 @@ model Account {
   type      AccountType @default(BANK)
   balance   Decimal     @db.Decimal(15, 2) @default(0)
   color     String      @default("#01696f")
+  institution String    @default("OTHER")
   isActive  Boolean     @default(true)
   createdAt DateTime    @default(now())
 
@@ -156,6 +157,7 @@ model CreditCard {
   userId        String
   name          String
   bank          String
+  institution   String   @default("OTHER")
   totalLimit    Decimal  @db.Decimal(15, 2)
   usedLimit     Decimal  @db.Decimal(15, 2) @default(0)
   dueAmount     Decimal  @db.Decimal(15, 2) @default(0)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
+import { accountSchema } from '../route'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -14,10 +15,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   })
   if (!account) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const body = await req.json()
+  const parsed = accountSchema.partial().safeParse(await req.json())
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   const updated = await prisma.account.update({
     where: { id },
-    data: body,
+    data: parsed.data,
   })
 
   return NextResponse.json(toJson(updated))
