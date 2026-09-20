@@ -30,6 +30,7 @@ const receiveIncome = require('../app/api/income-sources/[id]/receive/route')
 const paymentPlans = require('../app/api/payment-plans/route')
 const payPaymentPlan = require('../app/api/payment-plans/[id]/pay/route')
 const plan = require('../app/api/plan/route')
+const { buildLoanSchedule } = require('../lib/loan-schedule')
 function request(body, method = 'POST') {
   return new NextRequest('http://localhost/api/test', { method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
 }
@@ -110,6 +111,15 @@ test('variable bills, usage, repayments and lending remain consistent', async t 
       const responses = await Promise.all([debtPay.POST(request({ amount: 75 }), params(debt.id)), debtPay.POST(request({ amount: 75 }), params(debt.id))])
       assert.deepEqual(responses.map(r => r.status).sort(), [200, 400])
       assert.equal(Number((await prisma.debt.findUnique({ where: { id: debt.id } })).remaining), 25)
+    })
+    await t.test('loan records preserve a term and produce a principal-interest installment breakdown', async () => {
+      const loan = await json(await debts.POST(request({ name: 'Home loan', type: 'LOAN', amount: 120000, interestRate: 12, isRecurring: true, paymentDate: 5, paymentAmount: 10661.85, totalInstallments: 12, startDate: '2026-10-05' })), 201)
+      assert.equal(loan.totalInstallments, 12)
+      const schedule = buildLoanSchedule(loan.amount, loan.interestRate, loan.paymentAmount, loan.totalInstallments, loan.startDate, loan.paymentDate)
+      assert.equal(schedule.length, 12)
+      assert.equal(schedule[0].interest, 1200)
+      assert.ok(schedule[0].principal > 0)
+      assert.ok(schedule[11].closing <= 0.01)
     })
     await t.test('rejects inconsistent bill fields and ignores ownership fields', async () => {
       await json(await cardDetail.PATCH(request({ minimumDue: 999 }, 'PATCH'), params(card.id)), 400)

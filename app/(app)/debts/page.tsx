@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { formatCurrency, remainingPrincipal } from '@/lib/currency'
+import { buildLoanSchedule } from '@/lib/loan-schedule'
 import { Card, Button, Sheet, Input, Select, FAB, Badge, ProgressBar, DatePicker } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { CheckCircle, AlertCircle, Calendar, Trash2, Landmark, Coins, Edit2, CreditCard, RefreshCw, Download } from 'lucide-react'
@@ -25,6 +26,8 @@ interface Debt {
   isRecurring: boolean
   paymentDate?: number
   paymentAmount?: number
+  totalInstallments?: number
+  startDate?: string
   deadline?: string
   priority: 'LOW' | 'MEDIUM' | 'HIGH'
   description?: string
@@ -111,6 +114,18 @@ const PRIORITY_COLORS: Record<string, string> = {
   HIGH: '#ef4444',
 }
 
+function LoanScheduleSheet({ debt, onClose }: { debt: Debt; onClose: () => void }) {
+  const schedule = buildLoanSchedule(Number(debt.amount), Number(debt.interestRate || 0), Number(debt.paymentAmount), Number(debt.totalInstallments), debt.startDate!, debt.paymentDate)
+  const paidTotal = debt.payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
+  return <Sheet open onClose={onClose} title={`${debt.name} installment plan`}>
+    <div className="space-y-4 pb-4">
+      <Card className="p-4"><div className="grid grid-cols-3 gap-2 text-center"><div><p className="text-[10px] text-gray-500">Original</p><p className="font-bold">{formatCurrency(debt.amount)}</p></div><div><p className="text-[10px] text-gray-500">Paid so far</p><p className="font-bold text-success">{formatCurrency(paidTotal)}</p></div><div><p className="text-[10px] text-gray-500">Remaining</p><p className="font-bold text-danger">{formatCurrency(debt.remaining)}</p></div></div></Card>
+      <p className="text-xs text-gray-500">Estimated amortization from the principal, annual rate and EMI. Recorded payments show your actual payment progress.</p>
+      <Card className="overflow-hidden divide-y divide-border dark:divide-gray-800">{schedule.map((item, index) => { const paid = [...debt.payments].sort((a, b) => new Date(a.paidDate).getTime() - new Date(b.paidDate).getTime())[index]; return <div key={item.number} className="grid grid-cols-[28px_1fr_auto] gap-2 p-3 text-xs"><span className="font-bold text-primary">{item.number}</span><div><p className="font-semibold">{item.dueDate.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</p><p className="text-gray-500">Principal {formatCurrency(item.principal)} · Interest {formatCurrency(item.interest)}</p></div><div className="text-right"><p className="font-bold">{formatCurrency(item.emi)}</p><p className={paid ? 'text-success' : 'text-gray-400'}>{paid ? `Paid ${formatCurrency(paid.amount)}` : `Balance ${formatCurrency(item.closing)}`}</p></div></div> })}</Card>
+    </div>
+  </Sheet>
+}
+
 export default function DebtsPage() {
   const [tab, setTab] = useState<'active' | 'upcoming' | 'history'>('active')
   const [debts, setDebts] = useState<Debt[]>([])
@@ -127,6 +142,7 @@ export default function DebtsPage() {
   const [exportScope, setExportScope] = useState<ExportScope>('all')
   const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null)
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
+  const [scheduleDebt, setScheduleDebt] = useState<Debt | null>(null)
 
   // Filter & Sort States for Debts
   const [directionFilter, setDirectionFilter] = useState<'ALL' | Debt['direction']>('ALL')
@@ -145,6 +161,8 @@ export default function DebtsPage() {
     isRecurring: false,
     paymentDate: '',
     paymentAmount: '',
+    totalInstallments: '',
+    startDate: new Date().toISOString().slice(0, 10),
     deadline: '',
     priority: 'MEDIUM' as Debt['priority'],
     description: '',
@@ -161,6 +179,8 @@ export default function DebtsPage() {
     isRecurring: false,
     paymentDate: '',
     paymentAmount: '',
+    totalInstallments: '',
+    startDate: '',
     deadline: '',
     priority: 'MEDIUM' as Debt['priority'],
     description: '',
@@ -316,6 +336,10 @@ export default function DebtsPage() {
       if (debtForm.isRecurring) {
         payload.paymentDate = parseInt(debtForm.paymentDate, 10)
         payload.paymentAmount = parseFloat(debtForm.paymentAmount)
+        if (debtForm.type === 'LOAN') {
+          payload.totalInstallments = parseInt(debtForm.totalInstallments, 10)
+          payload.startDate = debtForm.startDate
+        }
       } else if (debtForm.deadline) {
         payload.deadline = debtForm.deadline
       }
@@ -337,6 +361,8 @@ export default function DebtsPage() {
         isRecurring: false,
         paymentDate: '',
         paymentAmount: '',
+        totalInstallments: '',
+        startDate: new Date().toISOString().slice(0, 10),
         deadline: '',
         priority: 'MEDIUM',
         description: '',
@@ -361,6 +387,8 @@ export default function DebtsPage() {
       isRecurring: debt.isRecurring,
       paymentDate: debt.paymentDate ? String(debt.paymentDate) : '',
       paymentAmount: debt.paymentAmount ? String(debt.paymentAmount) : '',
+      totalInstallments: debt.totalInstallments ? String(debt.totalInstallments) : '',
+      startDate: debt.startDate ? debt.startDate.slice(0, 10) : '',
       deadline: debt.deadline ? debt.deadline.slice(0, 10) : '',
       priority: debt.priority,
       description: debt.description || '',
@@ -388,9 +416,13 @@ export default function DebtsPage() {
       if (editForm.isRecurring) {
         payload.paymentDate = parseInt(editForm.paymentDate, 10)
         payload.paymentAmount = parseFloat(editForm.paymentAmount)
+        payload.totalInstallments = editForm.type === 'LOAN' && editForm.totalInstallments ? parseInt(editForm.totalInstallments, 10) : null
+        payload.startDate = editForm.type === 'LOAN' && editForm.startDate ? editForm.startDate : null
       } else {
         payload.paymentDate = null
         payload.paymentAmount = null
+        payload.totalInstallments = null
+        payload.startDate = null
       }
 
       await saveRequest(`/api/debts/${editingDebt.id}`, {
@@ -765,6 +797,14 @@ export default function DebtsPage() {
                       </p>
                     )}
 
+                    {debt.type === 'LOAN' && debt.isRecurring && debt.paymentAmount && debt.totalInstallments && debt.startDate && (
+                      <div className="rounded-xl bg-primary/5 p-3 text-xs dark:bg-primary/10">
+                        <div className="flex justify-between"><span>Loan term</span><span className="font-semibold">{debt.payments.length}/{debt.totalInstallments} installments recorded</span></div>
+                        <div className="mt-1 flex justify-between"><span>Monthly EMI</span><span className="font-semibold">{formatCurrency(debt.paymentAmount)}</span></div>
+                        <Button id={`view-loan-schedule-${debt.id}`} size="sm" variant="outline" onClick={() => setScheduleDebt(debt)} className="mt-3">View installment breakdown</Button>
+                      </div>
+                    )}
+
                     <div className="flex justify-between items-center pt-2 border-t border-border dark:border-gray-800">
                       <div className="text-xs text-gray-400">
                         {debt.isRecurring && debt.paymentDate ? (
@@ -1106,6 +1146,9 @@ export default function DebtsPage() {
       )}
 
       {/* Add Debt Sheet */}
+      {scheduleDebt && <LoanScheduleSheet debt={scheduleDebt} onClose={() => setScheduleDebt(null)} />}
+
+      {/* Add Debt Sheet */}
       <Sheet open={addSheetOpen} onClose={() => setAddSheetOpen(false)} title="Add Debt / Lending">
         <form onSubmit={handleAddDebt} className="space-y-4 pb-6">
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}
@@ -1169,7 +1212,7 @@ export default function DebtsPage() {
           </div>
 
           {debtForm.isRecurring ? (
-            <div className="grid grid-cols-2 gap-3">
+            <><div className="grid grid-cols-2 gap-3">
               <Input
                 label="Monthly Due Day (1-31)"
                 type="number"
@@ -1190,7 +1233,7 @@ export default function DebtsPage() {
                 placeholder="0.00"
                 required
               />
-            </div>
+            </div>{debtForm.type === 'LOAN' && <div className="grid grid-cols-2 gap-3"><Input id="loan-total-installments" label="Total installments" type="number" min="1" value={debtForm.totalInstallments} onChange={(e) => setDebtForm(p => ({ ...p, totalInstallments: e.target.value }))} required /><DatePicker label="First EMI date" name="loan-start-date" value={debtForm.startDate} onChange={(e) => setDebtForm(p => ({ ...p, startDate: e.target.value }))} required /></div>}</>
           ) : (
             <DatePicker
               label="Target Payoff Deadline (Optional)"
@@ -1298,7 +1341,7 @@ export default function DebtsPage() {
           </div>
 
           {editForm.isRecurring ? (
-            <div className="grid grid-cols-2 gap-3">
+            <><div className="grid grid-cols-2 gap-3">
               <Input
                 label="Monthly Due Day (1-31)"
                 type="number"
@@ -1319,7 +1362,7 @@ export default function DebtsPage() {
                 placeholder="0.00"
                 required
               />
-            </div>
+            </div>{editForm.type === 'LOAN' && <div className="grid grid-cols-2 gap-3"><Input id="edit-loan-total-installments" label="Total installments" type="number" min="1" value={editForm.totalInstallments} onChange={(e) => setEditForm(p => ({ ...p, totalInstallments: e.target.value }))} required /><DatePicker label="First EMI date" name="edit-loan-start-date" value={editForm.startDate} onChange={(e) => setEditForm(p => ({ ...p, startDate: e.target.value }))} required /></div>}</>
           ) : (
             <DatePicker
               label="Target Payoff Deadline (Optional)"

@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
 import { z } from 'zod'
-import { INSTITUTION_IDS } from '@/lib/institutions'
+import { inferInstitution, INSTITUTION_IDS } from '@/lib/institutions'
 
 export const accountSchema = z.object({
   name: z.string().min(1),
@@ -17,10 +17,16 @@ export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const accounts = await prisma.account.findMany({
+  const storedAccounts = await prisma.account.findMany({
     where: { userId: session.user.id, isActive: true },
     orderBy: { createdAt: 'asc' },
   })
+  const accounts = await Promise.all(storedAccounts.map(async account => {
+    if (account.institution !== 'OTHER') return account
+    const institution = inferInstitution(account.name, 'account')
+    if (institution === 'OTHER') return account
+    return prisma.account.update({ where: { id: account.id }, data: { institution } })
+  }))
 
   return NextResponse.json(toJson(accounts))
 }

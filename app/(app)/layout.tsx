@@ -1,7 +1,7 @@
 'use client'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutDashboard, Wallet, ArrowLeftRight, BarChart3, Coins } from 'lucide-react'
+import { LayoutDashboard, Wallet, Landmark, Coins } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { cn } from '@/lib/utils'
 
@@ -9,8 +9,8 @@ const tabs = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Plan' },
   { href: '/bills', icon: Coins, label: 'Bills' },
   { href: '/accounts', icon: Wallet, label: 'Accounts' },
-  { href: '/transactions', icon: ArrowLeftRight, label: 'Transactions' },
-  { href: '/reports', icon: BarChart3, label: 'Reports' },
+  { href: '/debts', icon: Coins, label: 'Loans' },
+  { href: '/income', icon: Landmark, label: 'Income' },
 ]
 
 const pageTitles: Record<string, string> = {
@@ -18,10 +18,8 @@ const pageTitles: Record<string, string> = {
   '/income': 'Income',
   '/bills': 'Bills',
   '/accounts': 'Accounts',
-  '/transactions': 'Transactions',
   '/expenses': 'Expenses & EMIs',
   '/debts': 'Debts',
-  '/reports': 'Reports',
   '/statement': 'Financial Statement',
   '/settings': 'Settings',
 }

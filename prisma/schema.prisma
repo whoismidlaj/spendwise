@@ -306,6 +306,8 @@ model Debt {
   isRecurring   Boolean      @default(false)
   paymentDate   Int?         
   paymentAmount Decimal?     @db.Decimal(15, 2)
+  totalInstallments Int?
+  startDate     DateTime?
   
   // Normal/One-time Details
   deadline      DateTime?    

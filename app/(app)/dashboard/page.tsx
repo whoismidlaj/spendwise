@@ -18,16 +18,16 @@ function dateText(date: string) {
 
 export default function DashboardPage() {
   const [plan, setPlan] = useState<Plan | null>(null)
-  const [range, setRange] = useState(90)
+  const [period, setPeriod] = useState<'month' | 'quarter'>('month')
   const [error, setError] = useState('')
 
   useEffect(() => {
     setPlan(null); setError('')
-    fetch(`/api/plan?days=${range}`).then(async response => {
+    fetch(`/api/plan?period=${period}`).then(async response => {
       if (!response.ok) throw new Error((await response.json()).error || 'Unable to load your plan')
       return response.json()
     }).then(setPlan).catch(error => setError(error.message))
-  }, [range])
+  }, [period])
 
   if (error) return <div className="p-4"><Card className="p-5 text-danger">{error}</Card></div>
   if (!plan) return <div className="flex h-64 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent" /></div>
@@ -53,7 +53,7 @@ export default function DashboardPage() {
       <Card className="p-4"><p className="text-xs text-gray-500">Safety buffer</p><p className="mt-1 text-xl font-bold">{formatCurrency(summary.cashBuffer)}</p><Link href="/settings" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">Change buffer <ArrowRight size={13} /></Link></Card>
     </div>
 
-    <div className="flex items-center justify-between px-1"><div><h2 className="font-semibold">Payment flow</h2><p className="text-xs text-gray-500">Income and due payments, in order</p></div><div className="flex rounded-xl bg-surface-offset p-1 dark:bg-gray-800">{[30, 90].map(days => <button key={days} onClick={() => setRange(days)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${range === days ? 'bg-white text-primary shadow-sm dark:bg-gray-700' : 'text-gray-500'}`}>{days}d</button>)}</div></div>
+    <div className="flex items-center justify-between px-1"><div><h2 className="font-semibold">Monthly payment flow</h2><p className="text-xs text-gray-500">Income and due payments for this month</p></div><div className="flex rounded-xl bg-surface-offset p-1 dark:bg-gray-800"><button onClick={() => setPeriod('month')} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${period === 'month' ? 'bg-white text-primary shadow-sm dark:bg-gray-700' : 'text-gray-500'}`}>This month</button><button onClick={() => setPeriod('quarter')} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${period === 'quarter' ? 'bg-white text-primary shadow-sm dark:bg-gray-700' : 'text-gray-500'}`}>3 months</button></div></div>
     <Card className="overflow-hidden divide-y divide-border dark:divide-gray-800">
       {items.slice(0, 12).map(item => <div key={item.id} className="flex items-center gap-3 px-4 py-3">
         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${item.kind === 'INCOME' ? 'bg-success/10 text-success' : item.status === 'OVERDUE' ? 'bg-danger/10 text-danger' : 'bg-primary/10 text-primary'}`}>{item.kind === 'INCOME' ? <Landmark size={17} /> : <CalendarDays size={17} />}</div>

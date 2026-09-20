@@ -14,6 +14,8 @@ const debtUpdateSchema = z.object({
   isRecurring: z.boolean().optional(),
   paymentDate: z.number().int().min(1).max(31).nullable().optional(),
   paymentAmount: z.number().finite().multipleOf(0.01).positive().nullable().optional(),
+  totalInstallments: z.number().int().positive().nullable().optional(),
+  startDate: z.string().date().nullable().optional(),
   deadline: z.string().date().nullable().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
   description: z.string().nullable().optional(),
@@ -47,6 +49,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (parsed.data.deadline !== undefined) {
       updateData.deadline = parsed.data.deadline ? new Date(parsed.data.deadline) : null
     }
+    if (parsed.data.startDate !== undefined) {
+      updateData.startDate = parsed.data.startDate ? new Date(parsed.data.startDate) : null
+    }
 
     if (parsed.data.remaining !== undefined) updateData.isActive = parsed.data.remaining > 0
     const updated = await prisma.debt.update({
@@ -77,4 +82,3 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   return NextResponse.json({ success: true })
 }
-

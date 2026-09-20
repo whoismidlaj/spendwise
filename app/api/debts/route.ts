@@ -13,6 +13,8 @@ const debtSchema = z.object({
   isRecurring: z.boolean().default(false),
   paymentDate: z.number().int().min(1).max(31).nullable().optional(),
   paymentAmount: z.number().finite().multipleOf(0.01).positive().nullable().optional(),
+  totalInstallments: z.number().int().positive().nullable().optional(),
+  startDate: z.string().date().nullable().optional(),
   deadline: z.string().date().nullable().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
   description: z.string().nullable().optional(),
@@ -52,6 +54,7 @@ export async function POST(req: NextRequest) {
       userId: session.user.id,
       remaining: parsed.data.amount,
       deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : null,
+      startDate: parsed.data.startDate ? new Date(parsed.data.startDate) : null,
     }
 
     const debt = await prisma.debt.create({

@@ -1,0 +1,2 @@
+ALTER TABLE "Debt" ADD COLUMN "totalInstallments" INTEGER;
+ALTER TABLE "Debt" ADD COLUMN "startDate" TIMESTAMP(3);

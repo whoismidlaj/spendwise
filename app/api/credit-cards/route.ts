@@ -3,18 +3,27 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
 import { cardSchema, cardBalanceError } from '@/lib/card-schema'
+import { inferInstitution } from '@/lib/institutions'
 
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const cards = await prisma.creditCard.findMany({
+  const storedCards = await prisma.creditCard.findMany({
     where: { userId: session.user.id, isActive: true },
     orderBy: { createdAt: 'asc' },
   })
+  const cards = await Promise.all(storedCards.map(async card => {
+    if (card.institution !== 'OTHER') return card
+    const institution = inferInstitution(`${card.bank} ${card.name}`, 'card')
+    if (institution === 'OTHER' || !INSTITUTION_IDS_FOR_CARDS.has(institution)) return card
+    return prisma.creditCard.update({ where: { id: card.id }, data: { institution } })
+  }))
 
   return NextResponse.json(toJson(cards))
 }
+
+const INSTITUTION_IDS_FOR_CARDS = new Set(['SBI_CARD', 'HDFC_CARD', 'JUPITER_CSB_CARD', 'AMAZON_PAY_LATER'])
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)

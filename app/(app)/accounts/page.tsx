@@ -60,7 +60,7 @@ function AccountForm({ onSuccess, initial }: { onSuccess: () => void; initial?: 
 
 function CreditCardForm({ onSuccess, initial }: { onSuccess: () => void; initial?: CreditCard }) {
   const [form, setForm] = useState({
-    name: initial?.name ?? '', bank: initial?.bank ?? '', institution: initial?.institution ?? inferInstitution(initial?.bank),
+    name: initial?.name ?? '', bank: initial?.bank ?? '', institution: initial?.institution ?? inferInstitution(initial?.bank, 'card'),
     totalLimit: String(initial?.totalLimit ?? ''), usedLimit: String(initial?.usedLimit ?? ''),
     dueAmount: String(initial?.dueAmount ?? ''), minimumDue: String(initial?.minimumDue ?? ''),
     expectedDue: String(initial?.expectedDue ?? ''), billDueDate: initial?.billDueDate?.slice(0, 10) ?? '',

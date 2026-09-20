@@ -24,8 +24,10 @@ export async function GET(req: NextRequest) {
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-  const end = new Date(start)
-  end.setDate(end.getDate() + Math.min(180, Math.max(30, Number(new URL(req.url).searchParams.get('days') || 90))))
+  const period = new URL(req.url).searchParams.get('period') === 'quarter' ? 'quarter' : 'month'
+  const end = period === 'month'
+    ? new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+    : new Date(now.getFullYear(), now.getMonth() + 3, 0, 23, 59, 59, 999)
   const months = monthsInRange(start, end)
   const [user, accounts, incomeSources, plans, recurring, cards, debts] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { cashBuffer: true } }),
