@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
 import { z } from 'zod'
 
-const paymentPlanSchema = z.object({
+export const paymentPlanSchema = z.object({
   name: z.string().trim().min(1),
   type: z.enum(['RENT', 'UTILITY', 'SUBSCRIPTION', 'INSURANCE', 'FAMILY', 'SAVINGS', 'OTHER']).default('OTHER'),
   amount: z.number().finite().positive(),

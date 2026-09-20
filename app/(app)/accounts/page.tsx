@@ -111,7 +111,7 @@ function CreditCardForm({ onSuccess, initial }: { onSuccess: () => void; initial
       <Input id="card-dueAmount" label="Actual Bill Remaining" type="number" min="0" step="0.01" value={form.dueAmount} onChange={f('dueAmount')} />
       <Input id="card-minimumDue" label="Minimum Due Amount" type="number" min="0" step="0.01" value={form.minimumDue} onChange={f('minimumDue')} />
       <Input id="card-bill-due-date" label="Current Bill Due Date (optional)" type="date" value={form.billDueDate} onChange={f('billDueDate')} />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
         <Input id="card-dueDate" label="Due Date (day)" type="number" min="1" max="31" value={form.dueDate} onChange={f('dueDate')} required />
         <Input id="card-statementDate" label="Statement Date (day)" type="number" min="1" max="31" value={form.statementDate} onChange={f('statementDate')} required />
       </div>
@@ -161,12 +161,12 @@ export default function AccountsPage() {
   }
 
   return (
-    <div className="px-4 py-4">
+    <div className="mx-auto max-w-3xl px-3 py-3 sm:px-4 sm:py-4">
       {/* Tab Switcher */}
       <div className="flex rounded-xl border border-border dark:border-gray-700 overflow-hidden mb-4">
         {(['accounts', 'cards'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={cn('flex-1 py-2.5 text-sm font-medium transition-colors',
+            className={cn('flex-1 truncate px-2 py-2.5 text-[13px] font-medium transition-colors min-[390px]:text-sm',
               tab === t ? 'bg-primary text-white' : 'text-gray-500 dark:text-gray-400')}>
             {t === 'accounts' ? 'Bank & Wallets' : 'Cards & Pay Later'}
           </button>
@@ -180,16 +180,14 @@ export default function AccountsPage() {
           </Button>
           {accounts.map(acc => (
             <Card key={acc.id} className="overflow-hidden">
-              <button className="w-full flex items-center gap-3 p-4" onClick={() => setExpanded(expanded === acc.id ? null : acc.id)}>
-                <InstitutionLogo institution={acc.institution} />
-                <div className="flex-1 text-left">
-                  <p className="font-medium dark:text-white">{acc.name}</p>
-                  <Badge className="mt-0.5 text-gray-500 dark:text-gray-400 bg-surface-offset dark:bg-gray-800">{INSTITUTIONS[acc.institution]?.label || acc.type}</Badge>
+              <button className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2.5 p-3.5 text-left" onClick={() => setExpanded(expanded === acc.id ? null : acc.id)}>
+                <InstitutionLogo institution={acc.institution} size={36} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold dark:text-white min-[390px]:text-base">{acc.name}</p>
+                  <Badge className="mt-0.5 max-w-full truncate bg-surface-offset text-[11px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{INSTITUTIONS[acc.institution]?.label || acc.type}</Badge>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold tabular-nums dark:text-white">{formatCurrency(acc.balance)}</p>
-                </div>
-                <ChevronDown size={16} className={cn('text-gray-400 transition-transform ml-1', expanded === acc.id && 'rotate-180')} />
+                <p className="whitespace-nowrap text-right text-sm font-bold tabular-nums dark:text-white min-[390px]:text-base">{formatCurrency(acc.balance)}</p>
+                <ChevronDown size={15} className={cn('text-gray-400 transition-transform', expanded === acc.id && 'rotate-180')} />
               </button>
               {expanded === acc.id && (
                 <div className="flex gap-2 px-4 pb-4">
@@ -216,18 +214,18 @@ export default function AccountsPage() {
             const available = card.totalLimit - card.usedLimit
             return (
               <Card key={card.id} className="overflow-hidden">
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex gap-2.5">
+                <div className="p-3.5 sm:p-4">
+                  <div className="mb-3 flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 gap-2.5">
                       <InstitutionLogo institution={card.institution} size={36} />
-                      <div><div className="flex items-center gap-1.5 mb-1">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{card.bank}</p>
-                        <Badge className="bg-surface-offset dark:bg-gray-800 text-[9px] text-gray-500 dark:text-gray-400 font-medium px-1.5 py-0.5 rounded">
+                      <div className="min-w-0"><div className="mb-1 flex min-w-0 items-center gap-1.5">
+                        <p className="truncate text-xs text-gray-500 dark:text-gray-400">{card.bank}</p>
+                        <Badge className="shrink-0 bg-surface-offset dark:bg-gray-800 text-[9px] text-gray-500 dark:text-gray-400 font-medium px-1.5 py-0.5 rounded">
                           {card.type === 'PAYLATER' ? 'Pay Later' : 'Credit Card'}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold dark:text-white">{card.name}</p>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <p className="truncate font-semibold dark:text-white">{card.name}</p>
                         {mounted && card.dueAmount > 0 && (card.billDueDate ? new Date(card.billDueDate.slice(0, 10) + 'T23:59:59') < new Date() : new Date().getDate() > card.dueDate) && (
                           <Badge className="bg-danger/10 text-danger dark:bg-danger/20 text-[10px] font-semibold uppercase tracking-wider py-0.5 px-2">Overdue</Badge>
                         )}
@@ -236,33 +234,33 @@ export default function AccountsPage() {
                         )}
                       </div></div>
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setSheet({ type: 'card', edit: card })} className="p-2 hover:bg-surface-offset dark:hover:bg-gray-800 rounded-lg">
+                    <div className="flex shrink-0 gap-0.5">
+                      <button onClick={() => setSheet({ type: 'card', edit: card })} className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-surface-offset dark:hover:bg-gray-800">
                         <Edit2 size={14} className="text-gray-400" />
                       </button>
-                      <button onClick={() => deleteCard(card.id)} className="p-2 hover:bg-surface-offset dark:hover:bg-gray-800 rounded-lg">
+                      <button onClick={() => deleteCard(card.id)} className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-surface-offset dark:hover:bg-gray-800">
                         <Trash2 size={14} className="text-danger" />
                       </button>
                     </div>
                   </div>
                   <Button id={`pay-card-${card.id}`} variant="outline" size="sm" disabled={card.usedLimit <= 0} onClick={() => setPayCard(card)} className="mb-3">Record Payment</Button>
                   <ProgressBar value={card.usedLimit} max={card.totalLimit} className="mb-3" />
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-center">
+                  <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
                     <div>
                       <p className="text-xs text-gray-400">Used</p>
-                      <p className="text-sm font-semibold tabular-nums dark:text-white">{formatCurrency(card.usedLimit)}</p>
+                      <p className="whitespace-nowrap text-sm font-semibold tabular-nums dark:text-white">{formatCurrency(card.usedLimit)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-400">Available</p>
-                      <p className="text-sm font-semibold tabular-nums text-success">{formatCurrency(available)}</p>
+                      <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-success">{formatCurrency(available)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-400">Actual bill</p>
-                      <p className="text-sm font-semibold tabular-nums text-danger">{formatCurrency(card.dueAmount)}</p>
+                      <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-danger">{formatCurrency(card.dueAmount)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-400">Min Due</p>
-                      <p className="text-sm font-semibold tabular-nums text-danger">{formatCurrency(card.minimumDue)}</p>
+                      <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-danger">{formatCurrency(card.minimumDue)}</p>
                     </div>
                   </div>
                   <p className="text-sm mt-3 dark:text-gray-200">Expected due: {formatCurrency(card.expectedDue ?? Math.max(0, card.usedLimit))} <span className="text-xs text-gray-400">({card.expectedDue === null ? 'from usage' : 'manual estimate'})</span></p>

@@ -42,7 +42,7 @@ export function Button({
   )
 }
 
-// Input — forwardRef so react-hook-form register() works
+// Input
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
   error?: string
@@ -70,7 +70,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   )
 })
 
-// Select — Custom styled component that integrates seamlessly with react-hook-form
+// Select
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
   error?: string
@@ -193,7 +193,7 @@ export function Badge({ children, color, className, style }: BadgeProps) {
   const colorStyle = color ? { backgroundColor: color + '20', color } : {}
   return (
     <span
-      className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', className)}
+      className={cn('inline-flex max-w-full items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium', className)}
       style={{ ...colorStyle, ...style }}
     >
       {children}
@@ -234,7 +234,7 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {/* Header */}
-        <div className="flex-shrink-0 px-5 pt-4 pb-3 border-b border-border dark:border-gray-800 relative">
+        <div className="flex-shrink-0 px-4 sm:px-5 pt-4 pb-3 border-b border-border dark:border-gray-800 relative">
           <div className="absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
           <div className="flex items-center justify-between mt-2">
             {title ? (
@@ -251,7 +251,7 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
           </div>
         </div>
         {/* Content */}
-        <div className="overflow-y-auto flex-1 px-5 py-4">
+        <div className="overflow-y-auto flex-1 px-4 py-4 sm:px-5">
           {children}
         </div>
       </div>

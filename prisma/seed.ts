@@ -1,4 +1,4 @@
-import { PrismaClient, AccountType, TransactionType, RecurringType } from '@prisma/client'
+import { PrismaClient, AccountType } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
@@ -21,44 +21,6 @@ async function main() {
     },
   })
 
-  // Default categories
-  const expenseCategories = [
-    { name: 'Food & Dining', icon: '🍔', color: '#ef4444' },
-    { name: 'Groceries', icon: '🛒', color: '#f97316' },
-    { name: 'Transport', icon: '🚌', color: '#eab308' },
-    { name: 'Shopping', icon: '🛍', color: '#a855f7' },
-    { name: 'Entertainment', icon: '🎬', color: '#ec4899' },
-    { name: 'Utilities', icon: '⚡', color: '#06b6d4' },
-    { name: 'Health', icon: '💊', color: '#10b981' },
-    { name: 'Education', icon: '📚', color: '#3b82f6' },
-    { name: 'Travel', icon: '✈️', color: '#8b5cf6' },
-    { name: 'Other', icon: '📌', color: '#6b7280' },
-  ]
-
-  const incomeCategories = [
-    { name: 'Salary', icon: '💼', color: '#22c55e' },
-    { name: 'Freelance', icon: '💻', color: '#14b8a6' },
-    { name: 'Investment', icon: '📈', color: '#6366f1' },
-    { name: 'Gift', icon: '🎁', color: '#f43f5e' },
-    { name: 'Other Income', icon: '💰', color: '#84cc16' },
-  ]
-
-  const createdExpenseCategories = await Promise.all(
-    expenseCategories.map((cat) =>
-      prisma.category.create({
-        data: { ...cat, userId: user.id, type: TransactionType.EXPENSE, isSystem: true },
-      })
-    )
-  )
-
-  const createdIncomeCategories = await Promise.all(
-    incomeCategories.map((cat) =>
-      prisma.category.create({
-        data: { ...cat, userId: user.id, type: TransactionType.INCOME, isSystem: true },
-      })
-    )
-  )
-
   // Accounts
   const hdfc = await prisma.account.create({
     data: {
@@ -70,7 +32,7 @@ async function main() {
     },
   })
 
-  const icici = await prisma.account.create({
+  await prisma.account.create({
     data: {
       userId: user.id,
       name: 'ICICI Current',
@@ -119,103 +81,53 @@ async function main() {
     },
   })
 
-  // Recurring Expenses
-  await prisma.recurringExpense.create({
+  // Loans and EMIs
+  await prisma.debt.create({
     data: {
       userId: user.id,
-      accountId: hdfc.id,
       name: 'Home Loan EMI',
-      type: RecurringType.EMI,
-      loanAmount: 3500000,
+      direction: 'BORROWED',
+      type: 'LOAN',
+      amount: 3500000,
+      remaining: 2975000,
       interestRate: 8.5,
-      emiAmount: 35000,
-      emiDate: 5,
-      totalEMIs: 240,
-      paidEMIs: 36,
+      isRecurring: true,
+      paymentAmount: 35000,
+      paymentDate: 5,
+      totalInstallments: 240,
       startDate: new Date('2021-01-01'),
     },
   })
 
-  await prisma.recurringExpense.create({
+  // Recurring bills
+  await prisma.paymentPlan.create({
     data: {
       userId: user.id,
       accountId: wallet.id,
       name: 'Netflix',
-      type: RecurringType.SUBSCRIPTION,
-      emiAmount: 649,
-      emiDate: 12,
+      type: 'SUBSCRIPTION',
+      amount: 649,
+      dueDay: 12,
       startDate: new Date('2022-06-01'),
     },
   })
 
-  await prisma.recurringExpense.create({
+  await prisma.debt.create({
     data: {
       userId: user.id,
-      accountId: hdfc.id,
       name: 'Car Loan EMI',
-      type: RecurringType.EMI,
-      loanAmount: 800000,
+      direction: 'BORROWED',
+      type: 'LOAN',
+      amount: 800000,
+      remaining: 560000,
       interestRate: 9.0,
-      emiAmount: 16500,
-      emiDate: 10,
-      totalEMIs: 60,
-      paidEMIs: 18,
+      isRecurring: true,
+      paymentAmount: 16500,
+      paymentDate: 10,
+      totalInstallments: 60,
       startDate: new Date('2022-07-01'),
     },
   })
-
-  // Sample transactions over last 3 months
-  const now = new Date()
-  const salary = createdIncomeCategories[0]
-  const food = createdExpenseCategories[0]
-  const groceries = createdExpenseCategories[1]
-  const transport = createdExpenseCategories[2]
-  const shopping = createdExpenseCategories[3]
-  const entertainment = createdExpenseCategories[4]
-  const utilities = createdExpenseCategories[5]
-  const health = createdExpenseCategories[6]
-
-  const transactions = [
-    // Current month
-    { name: 'Monthly Salary', type: TransactionType.INCOME, amount: 95000, accountId: hdfc.id, categoryId: salary.id, daysAgo: 2 },
-    { name: 'Swiggy Order', type: TransactionType.EXPENSE, amount: 450, accountId: wallet.id, categoryId: food.id, daysAgo: 1 },
-    { name: 'Reliance Fresh', type: TransactionType.EXPENSE, amount: 2800, accountId: hdfc.id, categoryId: groceries.id, daysAgo: 3 },
-    { name: 'Ola Cab', type: TransactionType.EXPENSE, amount: 220, accountId: wallet.id, categoryId: transport.id, daysAgo: 4 },
-    { name: 'Amazon Shopping', type: TransactionType.EXPENSE, amount: 3499, accountId: hdfc.id, categoryId: shopping.id, daysAgo: 5 },
-    { name: 'Movie Tickets', type: TransactionType.EXPENSE, amount: 800, accountId: icici.id, categoryId: entertainment.id, daysAgo: 6 },
-    { name: 'Electricity Bill', type: TransactionType.EXPENSE, amount: 1850, accountId: hdfc.id, categoryId: utilities.id, daysAgo: 7 },
-    // Last month
-    { name: 'Monthly Salary', type: TransactionType.INCOME, amount: 95000, accountId: hdfc.id, categoryId: salary.id, daysAgo: 32 },
-    { name: 'Zomato', type: TransactionType.EXPENSE, amount: 680, accountId: wallet.id, categoryId: food.id, daysAgo: 33 },
-    { name: 'Big Basket', type: TransactionType.EXPENSE, amount: 3200, accountId: hdfc.id, categoryId: groceries.id, daysAgo: 35 },
-    { name: 'Rapido Bike', type: TransactionType.EXPENSE, amount: 85, accountId: wallet.id, categoryId: transport.id, daysAgo: 36 },
-    { name: 'Flipkart Sale', type: TransactionType.EXPENSE, amount: 5999, accountId: icici.id, categoryId: shopping.id, daysAgo: 38 },
-    { name: 'Pharmacy', type: TransactionType.EXPENSE, amount: 450, accountId: hdfc.id, categoryId: health.id, daysAgo: 40 },
-    { name: 'Water Bill', type: TransactionType.EXPENSE, amount: 350, accountId: hdfc.id, categoryId: utilities.id, daysAgo: 42 },
-    // 2 months ago
-    { name: 'Monthly Salary', type: TransactionType.INCOME, amount: 95000, accountId: hdfc.id, categoryId: salary.id, daysAgo: 62 },
-    { name: 'Restaurant Dinner', type: TransactionType.EXPENSE, amount: 2100, accountId: icici.id, categoryId: food.id, daysAgo: 63 },
-    { name: 'DMART', type: TransactionType.EXPENSE, amount: 4500, accountId: hdfc.id, categoryId: groceries.id, daysAgo: 65 },
-    { name: 'Fuel', type: TransactionType.EXPENSE, amount: 2000, accountId: hdfc.id, categoryId: transport.id, daysAgo: 67 },
-    { name: 'Myntra', type: TransactionType.EXPENSE, amount: 1800, accountId: icici.id, categoryId: shopping.id, daysAgo: 70 },
-    { name: 'Gym Membership', type: TransactionType.EXPENSE, amount: 1500, accountId: hdfc.id, categoryId: health.id, daysAgo: 72 },
-  ]
-
-  for (const tx of transactions) {
-    const date = new Date(now)
-    date.setDate(date.getDate() - tx.daysAgo)
-    await prisma.transaction.create({
-      data: {
-        userId: user.id,
-        accountId: tx.accountId,
-        categoryId: tx.categoryId,
-        type: tx.type,
-        amount: tx.amount,
-        name: tx.name,
-        date,
-      },
-    })
-  }
 
   console.log('✅ Seed complete! Demo user: demo@spendwise.app / demo1234')
 }

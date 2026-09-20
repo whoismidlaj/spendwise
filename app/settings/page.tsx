@@ -1,14 +1,11 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Card, Button, Input, Select, Sheet } from '@/components/ui'
+import { Card, Button, Input, Sheet } from '@/components/ui'
 import { signOut } from 'next-auth/react'
-import { User, Lock, Globe, Tag, Trash2, Database, AlertTriangle, Printer, CreditCard, Wallet, CheckCircle2 } from 'lucide-react'
+import { User, Lock, Globe, Trash2, Database, AlertTriangle, Download, Upload } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface UserProfile { id: string; name: string; email: string; currency: string; cashBuffer: number }
-interface Category { id: string; name: string; icon: string; color: string; type: string; isSystem: boolean }
-interface AccountItem { id: string; name: string; type: string }
-interface CreditCardItem { id: string; name: string; bank: string }
 
 const CURRENCIES = [
   { value: 'INR', label: '₹ Indian Rupee' },
@@ -21,70 +18,26 @@ const CURRENCIES = [
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [categories, setCategories] = useState<Category[]>([])
-  const [accounts, setAccounts] = useState<AccountItem[]>([])
-  const [creditCards, setCreditCards] = useState<CreditCardItem[]>([])
-  const [defaultMethodValue, setDefaultMethodValue] = useState<string>('')
-  const [defaultMethodMsg, setDefaultMethodMsg] = useState('')
   const [form, setForm] = useState({ name: '', email: '', currency: 'INR', cashBuffer: '' })
   const [pwForm, setPwForm] = useState({ current: '', new: '', confirm: '' })
-  const [catForm, setCatForm] = useState({ name: '', icon: '📌', color: '#6b7280', type: 'EXPENSE' })
   const [loading, setLoading] = useState(false)
   const [pwLoading, setPwLoading] = useState(false)
   const [msg, setMsg] = useState('')
   const [pwMsg, setPwMsg] = useState('')
-  const [importing, setImporting] = useState(false)
-  const [importMsg, setImportMsg] = useState('')
+  const [restoring, setRestoring] = useState(false)
+  const [restoreMsg, setRestoreMsg] = useState('')
   const [showClearModal, setShowClearModal] = useState(false)
   const [confirmText, setConfirmText] = useState('')
   const [clearing, setClearing] = useState(false)
   const [clearMsg, setClearMsg] = useState('')
 
   async function load() {
-    const [user, cats, accs, cards] = await Promise.all([
-      fetch('/api/settings').then(r => r.json()),
-      fetch('/api/categories').then(r => r.json()),
-      fetch('/api/accounts').then(r => r.json()),
-      fetch('/api/credit-cards').then(r => r.json()),
-    ])
+    const user = await fetch('/api/settings').then(r => r.json())
     setProfile(user)
     setForm({ name: user.name ?? '', email: user.email ?? '', currency: user.currency ?? 'INR', cashBuffer: String(user.cashBuffer ?? 0) })
-    setCategories(cats || [])
-    setAccounts(accs || [])
-    setCreditCards(cards || [])
-
-    try {
-      const stored = localStorage.getItem('spendwise_default_payment_method')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (parsed?.type && parsed?.id) {
-          setDefaultMethodValue(`${parsed.type}:${parsed.id}`)
-        }
-      }
-    } catch (e) {
-      console.error(e)
-    }
   }
 
   useEffect(() => { load() }, [])
-
-  function saveDefaultPaymentMethod(e: React.FormEvent) {
-    e.preventDefault()
-    setDefaultMethodMsg('')
-    if (!defaultMethodValue) {
-      localStorage.removeItem('spendwise_default_payment_method')
-      setDefaultMethodMsg('Default payment method reset to automatic.')
-      return
-    }
-
-    const [type, id] = defaultMethodValue.split(':')
-    const itemObj = {
-      type: type as 'ACCOUNT' | 'CARD',
-      id,
-    }
-    localStorage.setItem('spendwise_default_payment_method', JSON.stringify(itemObj))
-    setDefaultMethodMsg('Default payment method saved! It will be preselected on new transactions.')
-  }
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setMsg('')
@@ -101,47 +54,36 @@ export default function SettingsPage() {
     setPwMsg(res.ok ? 'Password changed!' : data.error || 'Error'); setPwLoading(false)
   }
 
-  async function addCategory(e: React.FormEvent) {
-    e.preventDefault()
-    await fetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(catForm) })
-    setCatForm({ name: '', icon: '📌', color: '#6b7280', type: 'EXPENSE' }); load()
-  }
-
-  async function deleteCategory(id: string) {
-    if (!confirm('Delete this category?')) return
-    await fetch(`/api/categories?id=${id}`, { method: 'DELETE' }); load()
-  }
-
-  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleRestore(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setImportMsg('')
+    setRestoreMsg('')
     
-    if (!confirm('Importing data will OVERWRITE all your existing transactions, accounts, credit cards, and categories. Do you want to proceed?')) {
+    if (!confirm('Restoring this backup will replace your current Spendwise data. Do you want to continue?')) {
       e.target.value = ''
       return
     }
 
-    setImporting(true)
+    setRestoring(true)
     try {
       const text = await file.text()
       const data = JSON.parse(text)
-      const res = await fetch('/api/import', {
+      const res = await fetch('/api/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
       const result = await res.json()
       if (res.ok) {
-        setImportMsg('Data imported successfully!')
+        setRestoreMsg('Backup restored successfully!')
         load()
       } else {
-        setImportMsg(result.error || 'Import failed')
+        setRestoreMsg(result.error || 'Restore failed')
       }
     } catch (err: any) {
-      setImportMsg('Invalid backup file format')
+      setRestoreMsg('Invalid backup file format')
     } finally {
-      setImporting(false)
+      setRestoring(false)
       e.target.value = ''
     }
   }
@@ -170,7 +112,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="px-4 py-4 space-y-4 pb-8">
+    <div className="mx-auto max-w-3xl space-y-3 px-3 py-3 pb-8 sm:space-y-4 sm:px-4 sm:py-4">
       {/* Profile */}
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-4">
@@ -194,59 +136,6 @@ export default function SettingsPage() {
         </form>
       </Card>
 
-      {/* Default Payment Method */}
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Wallet size={16} className="text-primary" />
-          <h2 className="font-semibold dark:text-white">Default Payment Method</h2>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          Choose which bank account or credit card is selected automatically when recording new transactions.
-        </p>
-        <form onSubmit={saveDefaultPaymentMethod} className="space-y-3">
-          <div>
-            <select
-              value={defaultMethodValue}
-              onChange={(e) => setDefaultMethodValue(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-border dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
-            >
-              <option value="">Automatic (First active account)</option>
-
-              {accounts.length > 0 && (
-                <optgroup label="🏦 Bank & Cash Accounts">
-                  {accounts.map((a) => (
-                    <option key={`ACCOUNT:${a.id}`} value={`ACCOUNT:${a.id}`}>
-                      {a.name} ({a.type})
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-
-              {creditCards.length > 0 && (
-                <optgroup label="💳 Credit Cards & Pay Later">
-                  {creditCards.map((c) => (
-                    <option key={`CARD:${c.id}`} value={`CARD:${c.id}`}>
-                      {c.bank} {c.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
-
-          {defaultMethodMsg && (
-            <p className="text-xs text-success font-medium flex items-center gap-1.5">
-              <CheckCircle2 size={14} />
-              {defaultMethodMsg}
-            </p>
-          )}
-
-          <Button type="submit" size="sm">
-            Save Default Method
-          </Button>
-        </form>
-      </Card>
-
       {/* Password */}
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-4">
@@ -262,100 +151,47 @@ export default function SettingsPage() {
         </form>
       </Card>
 
-      {/* Categories */}
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Tag size={16} className="text-primary" />
-          <h2 className="font-semibold dark:text-white">Categories</h2>
-        </div>
-        <form onSubmit={addCategory} className="space-y-3 mb-4 p-3 bg-surface-offset dark:bg-gray-800 rounded-xl">
-          <h3 className="text-sm font-medium dark:text-gray-300">Add Category</h3>
-          <div className="grid grid-cols-2 gap-2">
-            <Input placeholder="Name" value={catForm.name} onChange={e => setCatForm(f => ({ ...f, name: e.target.value }))} required />
-            <Input placeholder="Icon (emoji)" value={catForm.icon} onChange={e => setCatForm(f => ({ ...f, icon: e.target.value }))} />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-gray-500">Color</label>
-              <input type="color" value={catForm.color} onChange={e => setCatForm(f => ({ ...f, color: e.target.value }))} className="h-10 w-full rounded-xl border border-border cursor-pointer" />
-            </div>
-            <select value={catForm.type} onChange={e => setCatForm(f => ({ ...f, type: e.target.value }))}
-              className="px-3 rounded-xl border border-border dark:border-gray-700 bg-white dark:bg-gray-700 dark:text-white text-sm">
-              <option value="EXPENSE">Expense</option>
-              <option value="INCOME">Income</option>
-            </select>
-          </div>
-          <Button type="submit" size="sm">Add Category</Button>
-        </form>
-        <div className="space-y-2">
-          {categories.map(cat => (
-            <div key={cat.id} className="flex items-center gap-3 py-2">
-              <span className="text-xl w-8 text-center">{cat.icon}</span>
-              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
-              <span className="flex-1 text-sm dark:text-gray-300">{cat.name}</span>
-              <span className="text-xs text-gray-400">{cat.type}</span>
-              {!cat.isSystem && (
-                <button onClick={() => deleteCategory(cat.id)} className="p-1.5 hover:bg-surface-offset dark:hover:bg-gray-800 rounded-lg">
-                  <Trash2 size={13} className="text-danger" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Backup & Export */}
+      {/* Backup & Restore */}
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-4">
           <Database size={16} className="text-primary" />
-          <h2 className="font-semibold dark:text-white">Backup & Export Reports</h2>
+          <h2 className="font-semibold dark:text-white">Backup & Restore</h2>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Export your financial data, liabilities, recurring EMIs, and debts into spreadsheets, printable statements, or JSON backups.
+          Download one JSON backup of your Spendwise data, or restore from a previous backup.
         </p>
         <div className="flex flex-col gap-3">
           <a
-            href="/statement"
-            target="_blank"
-            className="inline-flex items-center justify-between font-semibold rounded-xl transition-all min-h-[44px] px-4 py-2.5 text-xs sm:text-sm bg-primary hover:bg-primary-hover text-white"
-          >
-            <span className="flex items-center gap-2">
-              <Printer size={16} />
-              View & Print Liabilities Statement (PDF)
-            </span>
-            <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">PDF / Print</span>
-          </a>
-
-          <a
-            href="/api/export"
+            href="/api/backup"
             download
-            className="inline-flex items-center justify-center font-medium rounded-xl transition-all min-h-[44px] px-4 py-2.5 text-sm border border-border dark:border-gray-700 bg-surface-offset/60 hover:bg-surface-offset dark:bg-gray-800 dark:hover:bg-gray-750 text-gray-800 dark:text-gray-200 text-center"
+            className="inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all min-h-[44px] px-4 py-2.5 text-sm bg-primary hover:bg-primary-hover text-white text-center"
           >
-            Export Complete Backup (JSON)
+            <Download size={16} /> Download Backup (JSON)
           </a>
           
           <div className="relative">
             <input
               type="file"
               accept=".json"
-              onChange={handleImport}
+              onChange={handleRestore}
               className="hidden"
-              id="import-file"
-              disabled={importing}
+              id="restore-file"
+              disabled={restoring}
             />
             <label
-              htmlFor="import-file"
+              htmlFor="restore-file"
               className={cn(
                 "inline-flex items-center justify-center font-medium rounded-xl transition-all min-h-[44px] px-4 py-2.5 text-sm border border-dashed border-border dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-surface-offset dark:hover:bg-gray-800 w-full cursor-pointer text-center",
-                importing && "opacity-50 pointer-events-none"
+                restoring && "opacity-50 pointer-events-none"
               )}
             >
-              {importing ? 'Importing...' : 'Restore Backup (JSON)'}
+              <Upload size={16} className="mr-2" />
+              {restoring ? 'Restoring...' : 'Restore Backup (JSON)'}
             </label>
           </div>
-          {importMsg && (
-            <p className={cn("text-xs text-center mt-1", importMsg.includes('successfully') ? "text-success" : "text-danger")}>
-              {importMsg}
+          {restoreMsg && (
+            <p className={cn("text-xs text-center mt-1", restoreMsg.includes('successfully') ? "text-success" : "text-danger")}>
+              {restoreMsg}
             </p>
           )}
         </div>
@@ -371,7 +207,7 @@ export default function SettingsPage() {
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-danger">Clear All Data</h3>
                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                  Permanently delete all your accounts, credit cards, transactions, EMIs, debts, and budgets. Default categories will be preserved.
+                  Permanently delete all accounts, cards, bills, income, loans, debts, lending, and their payment history.
                 </p>
                 {clearMsg && (
                   <p className={cn("text-xs font-medium mt-2", clearMsg.includes('successfully') ? "text-success" : "text-danger")}>
@@ -427,9 +263,9 @@ export default function SettingsPage() {
               <ul className="list-disc list-inside space-y-0.5 ml-1 text-gray-700 dark:text-gray-300">
                 <li>Bank, Wallet & Cash Accounts</li>
                 <li>Credit Cards & Pay Later Accounts</li>
-                <li>Transactions and Expense history</li>
-                <li>Recurring EMIs & Loans</li>
-                <li>Debts & Monthly Budgets</li>
+                <li>Recurring bills and their payment history</li>
+                <li>Loans, EMIs, debts, and lending</li>
+                <li>Income and salary plans</li>
               </ul>
             </div>
           </div>

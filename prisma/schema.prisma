@@ -19,9 +19,6 @@ model User {
   accounts          Account[]
   creditCards       CreditCard[]
   transactions      Transaction[]
-  categories        Category[]
-  recurringExpenses RecurringExpense[]
-  budgets           Budget[]
   debts             Debt[]
   incomeSources     IncomeSource[]
   paymentPlans      PaymentPlan[]
@@ -41,7 +38,6 @@ model Account {
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions      Transaction[]      @relation("AccountTransactions")
   toTransactions    Transaction[]      @relation("ToAccountTransactions")
-  recurringExpenses RecurringExpense[]
   incomeSources     IncomeSource[]
   paymentPlans      PaymentPlan[]
 }
@@ -176,20 +172,6 @@ model CreditCard {
   transactions Transaction[]
 }
 
-model Category {
-  id       String          @id @default(cuid())
-  userId   String
-  name     String
-  icon     String
-  color    String
-  type     TransactionType
-  isSystem Boolean         @default(false)
-
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
-  budgets      Budget[]
-}
-
 model Transaction {
   id           String          @id @default(cuid())
   userId       String
@@ -197,7 +179,6 @@ model Transaction {
   managedPayment Boolean       @default(false)
   toAccountId  String?
   creditCardId String?
-  categoryId   String?
   type         TransactionType
   amount       Decimal         @db.Decimal(15, 2)
   name         String
@@ -210,68 +191,12 @@ model Transaction {
   account    Account?    @relation("AccountTransactions", fields: [accountId], references: [id])
   toAccount  Account?    @relation("ToAccountTransactions", fields: [toAccountId], references: [id])
   creditCard CreditCard? @relation(fields: [creditCardId], references: [id])
-  category   Category?   @relation(fields: [categoryId], references: [id])
 }
 
 enum TransactionType {
   INCOME
   EXPENSE
   TRANSFER
-}
-
-model RecurringExpense {
-  id             String        @id @default(cuid())
-  userId         String
-  accountId      String?
-  name           String
-  type           RecurringType @default(EMI)
-  loanAmount     Decimal?      @db.Decimal(15, 2)
-  interestRate   Decimal?      @db.Decimal(5, 2)
-  additionalFees Decimal?      @db.Decimal(15, 2) @default(0)
-  emiAmount      Decimal       @db.Decimal(15, 2)
-  emiDate        Int
-  totalEMIs      Int?
-  paidEMIs       Int           @default(0)
-  startDate      DateTime
-  isActive       Boolean       @default(true)
-  createdAt      DateTime      @default(now())
-
-  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account  Account?     @relation(fields: [accountId], references: [id])
-  payments EMIPayment[]
-}
-
-enum RecurringType {
-  EMI
-  LOAN
-  SUBSCRIPTION
-  UTILITY
-  RENT
-  OTHER
-}
-
-model EMIPayment {
-  id                 String   @id @default(cuid())
-  recurringExpenseId String
-  amount             Decimal  @db.Decimal(15, 2)
-  paidDate           DateTime
-  emiNumber          Int
-
-  recurringExpense RecurringExpense @relation(fields: [recurringExpenseId], references: [id], onDelete: Cascade)
-}
-
-model Budget {
-  id         String  @id @default(cuid())
-  userId     String
-  categoryId String
-  amount     Decimal @db.Decimal(15, 2)
-  month      Int
-  year       Int
-
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, categoryId, month, year])
 }
 
 enum DebtType {

@@ -27,8 +27,8 @@ export function TopBar({ title }: TopBarProps) {
   return (
     <header className={cn("sticky top-0 bg-white dark:bg-gray-900 border-b border-border dark:border-gray-800", menuOpen ? "z-[200]" : "z-40")}
       style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-      <div className="flex items-center justify-between px-4 h-14">
-        <div className="flex items-center gap-3">
+      <div className="flex h-14 items-center justify-between px-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
           <button
             onClick={() => setMenuOpen(true)}
             className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-surface-offset dark:hover:bg-gray-800 active:scale-95 transition-all"
@@ -36,7 +36,7 @@ export function TopBar({ title }: TopBarProps) {
           >
             <Menu size={20} />
           </button>
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h1>
+          <h1 className="truncate text-lg font-semibold text-gray-900 dark:text-white">{title}</h1>
         </div>
         
         <button
@@ -62,7 +62,7 @@ export function TopBar({ title }: TopBarProps) {
         {/* Drawer Panel */}
         <div
           className={cn(
-            "absolute left-0 top-0 bottom-0 w-80 bg-white dark:bg-gray-900 shadow-2xl flex flex-col transition-transform duration-300 ease-out transform overflow-y-auto",
+            "absolute left-0 top-0 bottom-0 w-[min(20rem,calc(100vw-2rem))] bg-white dark:bg-gray-900 shadow-2xl flex flex-col transition-transform duration-300 ease-out transform overflow-y-auto",
             menuOpen ? "translate-x-0" : "-translate-x-full"
           )}
         >
@@ -90,12 +90,11 @@ export function TopBar({ title }: TopBarProps) {
               Navigation
             </div>
             {[
-              { href: '/dashboard', label: 'Dashboard', icon: '📊' },
-              { href: '/income', label: 'Income & Salary', icon: '💵' },
-              { href: '/bills', label: 'Bills & Payment Plan', icon: '🗓️' },
+              { href: '/dashboard', label: 'Money Plan', icon: '📊' },
+              { href: '/bills', label: 'Bills', icon: '🗓️' },
               { href: '/accounts', label: 'Accounts & Cards', icon: '💳' },
-              { href: '/expenses', label: 'Recurring Payments', icon: '🔄' },
               { href: '/debts', label: 'Loans & Lending', icon: '📉' },
+              { href: '/income', label: 'Income & Salary', icon: '💵' },
               { href: '/settings', label: 'App Settings', icon: '⚙️' },
             ].map((item) => (
               <Link

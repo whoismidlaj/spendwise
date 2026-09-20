@@ -80,9 +80,8 @@ Open http://localhost:3000
 The demo account includes:
 - 3 accounts (HDFC Savings, ICICI Current, PhonePe Wallet)
 - 2 credit cards (HDFC Millennia, SBI SimplyCLICK)
-- 3 recurring expenses (Home Loan EMI, Netflix, Car Loan EMI)
-- 20 sample transactions over 3 months
-- All default expense and income categories
+- 2 installment loans (Home Loan EMI, Car Loan EMI)
+- 1 recurring bill (Netflix)
 
 ---
 
@@ -94,12 +93,11 @@ The demo account includes:
 ---
 
 ## Tech Stack
-- **Framework:** Next.js 14 (App Router, TypeScript)
+- **Framework:** Next.js 16 (App Router, TypeScript)
 - **Database:** PostgreSQL + Prisma ORM
 - **Auth:** NextAuth.js v4 (email/password with JWT)
 - **Styling:** Tailwind CSS v3 with custom color palette
-- **Charts:** Recharts
-- **Forms:** React Hook Form + Zod
+- **Validation:** Zod
 - **PWA:** next-pwa
 - **Icons:** Lucide React
 
@@ -109,21 +107,20 @@ The demo account includes:
 ```
 app/
   (auth)/login, register    — Auth pages
-  (app)/dashboard           — Dashboard with balance, cards, recent txns
+  (app)/dashboard           — This-month and next-month money plans
+  (app)/bills               — Rent, utilities, subscriptions and other bills
   (app)/accounts            — Bank accounts + credit cards management
-  (app)/transactions        — Full transaction list with filters
-  (app)/expenses            — Expense analysis + recurring EMIs
-  (app)/reports             — Charts: trends, categories, export CSV
-  settings/                 — Profile, password, categories, currency
-  api/                      — All REST API routes
+  (app)/debts               — Loans, EMIs, personal debts and lending
+  (app)/income              — Expected and received salary or other income
+  settings/                 — Profile, safety buffer and JSON backup/restore
+  api/                      — APIs for the five planning areas and settings
 components/
   ui/                       — Button, Input, Select, Sheet, Badge, Card, FAB
   layout/                   — TopBar
-  transactions/             — TransactionForm
 lib/
   prisma.ts                 — Prisma singleton + Decimal toJson helper
   auth.ts                   — NextAuth config
-  currency.ts               — formatCurrency, remainingPrincipal
+  currency.ts               — currency formatting
 prisma/
   schema.prisma             — Full database schema
   seed.ts                   — Demo data seed
@@ -131,25 +128,25 @@ prisma/
 
 ## Variable card bills and lending
 
-- In **Accounts → Cards**, usage changes with recorded purchases. Expected due
-  defaults to outstanding usage; leave the override blank to use that estimate.
+- In **Accounts → Cards**, update current usage when you check the provider app.
+  Expected due defaults to outstanding usage; leave the override blank to use that estimate.
   An override is a remaining estimate and decreases as payments are recorded.
 - Enter the actual bill remaining, minimum due and current bill due date from
   each statement. New purchases do not change those statement amounts. Use
   **Record Payment** for full or partial payments. The estimate cannot predict
   provider fees, interest or installment schedules.
-- Upcoming dues show each dated actual bill once, with its minimum separately.
+- The Money Plan shows each dated actual bill once, with its minimum separately.
   Without a current bill date, the due day is interpreted in the current month.
-- In **Debts & Lending**, choose **I owe** or **Owed to me**. Adding a record tracks
+- In **Loans & Lending**, choose **I owe** or **Owed to me**. Adding a record tracks
   an existing balance without changing an account. Repayments debit or credit
   the selected account; principal repayments are transfers rather than income
   or expenses. Settled repayments remain in payment history.
-- Payment-generated transactions cannot be edited or deleted independently of
-  the balance they settled. Existing historical transactions are unchanged.
+- Managed payments use a private balance ledger so account totals stay
+  auditable. The app has no manual transaction or reporting screens.
 
 Database integration checks (use a local development database):
 ```bash
-node --test tests/liabilities.integration.cjs
+node --test tests/liabilities.integration.cjs tests/backup.integration.cjs
 ```
 These checks create temporary users and remove their data afterward.
 
