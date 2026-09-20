@@ -266,8 +266,8 @@ export function FAB({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       className="mobile-fab fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary p-0 text-white shadow-xl transition-all hover:bg-primary-hover active:scale-95"
-      aria-label="Add payment or transfer"
-      title="Add payment or transfer"
+      aria-label="Add transaction"
+      title="Add transaction"
     >
       <Plus size={27} strokeWidth={2.25} aria-hidden="true" />
     </button>

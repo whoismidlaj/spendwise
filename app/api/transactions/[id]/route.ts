@@ -24,6 +24,14 @@ async function validateDestination(tx: Prisma.TransactionClient, userId: string,
     return
   }
 
+  if (data.mode === 'INCOME') {
+    if (!data.accountId) throw new PaymentError('Choose the receiving account')
+    if (!await tx.account.findFirst({ where: { id: data.accountId, userId, isActive: true } })) {
+      throw new PaymentError('Account not found', 404)
+    }
+    return
+  }
+
   if (!data.accountId || !data.toAccountId || data.accountId === data.toAccountId) {
     throw new PaymentError('Choose two different accounts')
   }
@@ -50,6 +58,13 @@ async function reverseEffect(tx: Prisma.TransactionClient, entry: TransactionRec
           },
         })
       }
+    }
+    return
+  }
+
+  if (entry.type === 'INCOME') {
+    if (entry.accountId) {
+      await tx.account.update({ where: { id: entry.accountId }, data: { balance: { decrement: amount } } })
     }
     return
   }
@@ -82,6 +97,11 @@ async function applyEffect(tx: Prisma.TransactionClient, data: QuickTransaction)
     return
   }
 
+  if (data.mode === 'INCOME') {
+    await tx.account.update({ where: { id: data.accountId! }, data: { balance: { increment: data.amount } } })
+    return
+  }
+
   await tx.account.update({ where: { id: data.accountId! }, data: { balance: { decrement: data.amount } } })
   await tx.account.update({ where: { id: data.toAccountId! }, data: { balance: { increment: data.amount } } })
 }
@@ -105,8 +125,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const existing = await tx.transaction.findFirst({ where: { id, userId: session.user.id } })
       if (!existing) throw new PaymentError('Transaction not found', 404)
       if (existing.managedPayment) throw new PaymentError('Automatic entries must be changed from their original bill, loan, card, or income record')
-      if (existing.type === 'INCOME') throw new PaymentError('This income entry must be changed from Income')
-
       const data = parsed.data
       await validateDestination(tx, session.user.id, data)
       await reverseEffect(tx, existing)
@@ -115,7 +133,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return tx.transaction.update({
         where: { id },
         data: {
-          type: data.mode === 'TRANSFER' ? 'TRANSFER' : 'EXPENSE',
+          type: data.mode === 'TRANSFER' ? 'TRANSFER' : data.mode === 'INCOME' ? 'INCOME' : 'EXPENSE',
           amount: data.amount,
           name: data.name,
           date,
@@ -141,7 +159,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       const existing = await tx.transaction.findFirst({ where: { id, userId: session.user.id } })
       if (!existing) throw new PaymentError('Transaction not found', 404)
       if (existing.managedPayment) throw new PaymentError('Automatic entries must be changed from their original bill, loan, card, or income record')
-      if (existing.type === 'INCOME') throw new PaymentError('This income entry must be changed from Income')
       await reverseEffect(tx, existing)
       await tx.transaction.delete({ where: { id } })
     })

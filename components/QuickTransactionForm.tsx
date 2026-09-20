@@ -10,7 +10,7 @@ type Account = { id: string; name: string; institution?: string; type?: string }
 type CreditCard = { id: string; name: string; bank: string; institution?: string; type: 'CARD' | 'PAYLATER' }
 export type EditableQuickTransaction = {
   id: string
-  type: 'EXPENSE' | 'TRANSFER'
+  type: 'INCOME' | 'EXPENSE' | 'TRANSFER'
   amount: number
   name: string
   date: string
@@ -54,7 +54,7 @@ export function QuickTransactionForm({ onSuccess, transaction }: { onSuccess: ()
   const initialDate = dateParts(transaction?.date)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [cards, setCards] = useState<CreditCard[]>([])
-  const [mode, setMode] = useState<'PAYMENT' | 'TRANSFER'>(transaction?.type === 'TRANSFER' ? 'TRANSFER' : 'PAYMENT')
+  const [mode, setMode] = useState<'PAYMENT' | 'INCOME' | 'TRANSFER'>(transaction?.type === 'TRANSFER' ? 'TRANSFER' : transaction?.type === 'INCOME' ? 'INCOME' : 'PAYMENT')
   const [source, setSource] = useState<'ACCOUNT' | 'CARD'>(transaction?.creditCard ? 'CARD' : 'ACCOUNT')
   const [amount, setAmount] = useState(transaction ? String(transaction.amount) : '')
   const [name, setName] = useState(transaction?.name || '')
@@ -88,7 +88,7 @@ export function QuickTransactionForm({ onSuccess, transaction }: { onSuccess: ()
         body: JSON.stringify({
           mode, amount: Number(amount), name, date,
           occurredAt: new Date(`${date}T${time}:00`).toISOString(),
-          accountId: mode === 'TRANSFER' || source === 'ACCOUNT' ? accountId : null,
+          accountId: mode !== 'PAYMENT' || source === 'ACCOUNT' ? accountId : null,
           creditCardId: mode === 'PAYMENT' && source === 'CARD' ? creditCardId : null,
           toAccountId: mode === 'TRANSFER' ? toAccountId : null,
         }),
@@ -103,24 +103,25 @@ export function QuickTransactionForm({ onSuccess, transaction }: { onSuccess: ()
   }
 
   const hasPaymentSource = source === 'ACCOUNT' ? Boolean(accountId) : Boolean(creditCardId)
-  const canSubmit = mode === 'PAYMENT' ? hasPaymentSource : Boolean(accountId && toAccountId && accountId !== toAccountId)
+  const canSubmit = mode === 'PAYMENT' ? hasPaymentSource : mode === 'INCOME' ? Boolean(accountId) : Boolean(accountId && toAccountId && accountId !== toAccountId)
 
   return <form onSubmit={submit} className="space-y-4 pb-4">
-    <div className="grid grid-cols-2 rounded-xl bg-surface-offset p-1 dark:bg-gray-800">
-      {([['PAYMENT', 'Payment'], ['TRANSFER', 'Transfer']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMode(value)} className={cn('rounded-lg px-3 py-2 text-sm font-semibold', mode === value ? 'bg-white text-primary shadow-sm dark:bg-gray-700' : 'text-gray-500')}>{label}</button>)}
+    <div className="grid grid-cols-3 rounded-xl bg-surface-offset p-1 dark:bg-gray-800">
+      {([['PAYMENT', 'Payment'], ['INCOME', 'Incoming'], ['TRANSFER', 'Transfer']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMode(value)} className={cn('truncate rounded-lg px-1.5 py-2 text-xs font-semibold min-[390px]:text-sm', mode === value ? 'bg-white text-primary shadow-sm dark:bg-gray-700' : 'text-gray-500')}>{label}</button>)}
     </div>
     {mode === 'PAYMENT' && <div className="grid grid-cols-2 gap-2">
       <button type="button" onClick={() => setSource('ACCOUNT')} className={cn('min-h-11 rounded-xl border px-2 text-xs font-semibold', source === 'ACCOUNT' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-gray-500 dark:border-gray-700')}>Bank / wallet</button>
       <button type="button" onClick={() => setSource('CARD')} className={cn('min-h-11 rounded-xl border px-2 text-xs font-semibold', source === 'CARD' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-gray-500 dark:border-gray-700')}>Card / Pay Later</button>
     </div>}
     <Input label="Amount" type="number" inputMode="decimal" min="0.01" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} placeholder="0.00" className="text-2xl font-bold tabular-nums" required />
-    <Input label={mode === 'TRANSFER' ? 'Transfer note' : 'What did you pay for?'} value={name} onChange={event => setName(event.target.value)} placeholder={mode === 'TRANSFER' ? 'e.g. Move to savings' : 'e.g. Groceries'} required />
+    <Input label={mode === 'TRANSFER' ? 'Transfer note' : mode === 'INCOME' ? 'Where did this money come from?' : 'What did you pay for?'} value={name} onChange={event => setName(event.target.value)} placeholder={mode === 'TRANSFER' ? 'e.g. Move to savings' : mode === 'INCOME' ? 'e.g. Refund or cash deposit' : 'e.g. Groceries'} required />
     <div className="grid grid-cols-[minmax(0,1fr)_128px] gap-3"><DatePicker label="Date" value={date} onChange={event => setDate(event.target.value)} required /><TimePicker label="Time" value={time} onChange={event => setTime(event.target.value)} /></div>
     {mode === 'PAYMENT' && source === 'ACCOUNT' && <AccountPicker accounts={accounts} value={accountId} onChange={setAccountId} label="Paid from" />}
     {mode === 'PAYMENT' && source === 'CARD' && <CardPicker cards={cards} value={creditCardId} onChange={setCreditCardId} />}
+    {mode === 'INCOME' && <AccountPicker accounts={accounts} value={accountId} onChange={setAccountId} label="Received into" />}
     {mode === 'TRANSFER' && <div className="space-y-3"><AccountPicker accounts={accounts} value={accountId} onChange={id => { setAccountId(id); if (toAccountId === id) setToAccountId(accounts.find(account => account.id !== id)?.id || '') }} label="From account" /><AccountPicker accounts={accounts} value={toAccountId} onChange={setToAccountId} label="To account" excludeId={accountId} /></div>}
     {mode === 'PAYMENT' && source === 'CARD' && <p className="text-xs text-gray-500">This increases current usage and the expected due. Your issued bill and minimum due stay unchanged.</p>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    <Button type="submit" size="lg" loading={loading} disabled={!canSubmit}>{transaction ? 'Save changes' : mode === 'TRANSFER' ? 'Record transfer' : 'Add payment'}</Button>
+    <Button type="submit" size="lg" loading={loading} disabled={!canSubmit}>{transaction ? 'Save changes' : mode === 'TRANSFER' ? 'Record transfer' : mode === 'INCOME' ? 'Add incoming money' : 'Add payment'}</Button>
   </form>
 }

@@ -92,6 +92,15 @@ test('variable bills, usage, repayments and lending remain consistent', async t 
       assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 850)
       assert.equal(Number((await prisma.account.findUnique({ where: { id: destination.id } })).balance), 50)
 
+      const incoming = await json(await transactions.POST(request({ mode: 'INCOME', amount: 300, name: 'Cash refund', date: '2026-09-22', occurredAt: '2026-09-22T11:10:00.000Z', accountId: source.id })), 201)
+      assert.equal(incoming.type, 'INCOME')
+      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 1150)
+      await json(await transactionDetail.PATCH(request({ mode: 'INCOME', amount: 250, name: 'Updated refund', date: '2026-09-22', occurredAt: '2026-09-22T11:15:00.000Z', accountId: destination.id }, 'PATCH'), params(incoming.id)))
+      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 850)
+      assert.equal(Number((await prisma.account.findUnique({ where: { id: destination.id } })).balance), 300)
+      await json(await transactionDetail.DELETE(request({}, 'DELETE'), params(incoming.id)))
+      assert.equal(Number((await prisma.account.findUnique({ where: { id: destination.id } })).balance), 50)
+
       const automatic = await prisma.transaction.create({ data: { userId, accountId: source.id, managedPayment: true, type: 'EXPENSE', amount: 10, name: 'Automatic bill', date: new Date() } })
       await json(await transactionDetail.DELETE(request({}, 'DELETE'), params(automatic.id)), 400)
       assert.ok(await prisma.transaction.findUnique({ where: { id: automatic.id } }))

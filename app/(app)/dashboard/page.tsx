@@ -67,7 +67,7 @@ export default function DashboardPage() {
     </Card>
     <div className="grid grid-cols-2 gap-3"><Link href="/income"><Button className="w-full gap-2"><Landmark size={16} /> Add income</Button></Link><Link href="/bills"><Button variant="outline" className="w-full gap-2"><WalletCards size={16} /> Add bill</Button></Link></div>
     <FAB onClick={() => setQuickEntryOpen(true)} />
-    <Sheet open={quickEntryOpen} onClose={() => setQuickEntryOpen(false)} title="Quick payment">
+    <Sheet open={quickEntryOpen} onClose={() => setQuickEntryOpen(false)} title="Add transaction">
       <QuickTransactionForm onSuccess={() => { setQuickEntryOpen(false); setRefreshKey(value => value + 1) }} />
     </Sheet>
   </div>

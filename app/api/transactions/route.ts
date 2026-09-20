@@ -6,7 +6,7 @@ import { atomic, PaymentError } from '@/lib/payments'
 import { z } from 'zod'
 
 export const quickTransactionSchema = z.object({
-  mode: z.enum(['PAYMENT', 'TRANSFER']),
+  mode: z.enum(['PAYMENT', 'INCOME', 'TRANSFER']),
   amount: z.number().finite().positive().multipleOf(0.01),
   name: z.string().trim().min(1).max(100),
   date: z.string().date(),
@@ -76,6 +76,18 @@ export async function POST(req: NextRequest) {
         return entry
       }
 
+      if (data.mode === 'INCOME') {
+        if (!data.accountId) throw new PaymentError('Choose the receiving account')
+        const account = await tx.account.findFirst({ where: { id: data.accountId, userId: session.user.id, isActive: true } })
+        if (!account) throw new PaymentError('Account not found', 404)
+        const entry = await tx.transaction.create({ data: {
+          userId: session.user.id, accountId: account.id, type: 'INCOME', amount: data.amount,
+          name: data.name, date, managedPayment: false,
+        } })
+        await tx.account.update({ where: { id: account.id }, data: { balance: { increment: data.amount } } })
+        return entry
+      }
+
       if (!data.accountId || !data.toAccountId || data.accountId === data.toAccountId) {
         throw new PaymentError('Choose two different accounts')
       }
@@ -94,6 +106,6 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json(toJson(result), { status: 201 })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof PaymentError ? error.message : 'Unable to save payment' }, { status: error instanceof PaymentError ? error.status : 500 })
+    return NextResponse.json({ error: error instanceof PaymentError ? error.message : 'Unable to save transaction' }, { status: error instanceof PaymentError ? error.status : 500 })
   }
 }
