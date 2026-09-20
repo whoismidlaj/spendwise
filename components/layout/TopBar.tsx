@@ -25,7 +25,7 @@ export function TopBar({ title }: TopBarProps) {
     : session?.user?.email?.[0].toUpperCase() ?? 'U'
 
   return (
-    <header className={cn("sticky top-0 bg-white dark:bg-gray-900 border-b border-border dark:border-gray-800", menuOpen ? "z-[200]" : "z-40")}
+    <header className={cn("fixed inset-x-0 top-0 bg-white dark:bg-gray-900 border-b border-border dark:border-gray-800", menuOpen ? "z-[200]" : "z-40")}
       style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       <div className="flex h-14 items-center justify-between px-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-2.5">

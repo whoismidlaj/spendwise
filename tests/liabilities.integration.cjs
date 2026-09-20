@@ -28,6 +28,7 @@ const paymentPlans = require('../app/api/payment-plans/route')
 const payPaymentPlan = require('../app/api/payment-plans/[id]/pay/route')
 const plan = require('../app/api/plan/route')
 const transactions = require('../app/api/transactions/route')
+const transactionDetail = require('../app/api/transactions/[id]/route')
 const { buildLoanSchedule } = require('../lib/loan-schedule')
 function request(body, method = 'POST') {
   return new NextRequest('http://localhost/api/test', { method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
@@ -56,17 +57,17 @@ test('variable bills, usage, repayments and lending remain consistent', async t 
         expectedDue: 100, dueAmount: 0, minimumDue: 0, dueDate: 20, statementDate: 5,
       } })
 
-      await json(await transactions.POST(request({ mode: 'PAYMENT', amount: 100, name: 'Groceries', date: '2026-09-20', occurredAt: '2026-09-20T14:35:00.000Z', accountId: source.id })), 201)
+      const groceries = await json(await transactions.POST(request({ mode: 'PAYMENT', amount: 100, name: 'Groceries', date: '2026-09-20', occurredAt: '2026-09-20T14:35:00.000Z', accountId: source.id })), 201)
       assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 900)
 
-      await json(await transactions.POST(request({ mode: 'PAYMENT', amount: 25, name: 'Hosting', date: '2026-09-20', creditCardId: quickCard.id })), 201)
+      const hosting = await json(await transactions.POST(request({ mode: 'PAYMENT', amount: 25, name: 'Hosting', date: '2026-09-20', creditCardId: quickCard.id })), 201)
       const cardAfterPurchase = await prisma.creditCard.findUnique({ where: { id: quickCard.id } })
       assert.equal(Number(cardAfterPurchase.usedLimit), 125)
       assert.equal(Number(cardAfterPurchase.expectedDue), 125)
       assert.equal(Number(cardAfterPurchase.dueAmount), 0)
       assert.equal(Number(cardAfterPurchase.minimumDue), 0)
 
-      await json(await transactions.POST(request({ mode: 'TRANSFER', amount: 200, name: 'Move to savings', date: '2026-09-20', accountId: source.id, toAccountId: destination.id })), 201)
+      const transfer = await json(await transactions.POST(request({ mode: 'TRANSFER', amount: 200, name: 'Move to savings', date: '2026-09-20', accountId: source.id, toAccountId: destination.id })), 201)
       assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 700)
       assert.equal(Number((await prisma.account.findUnique({ where: { id: destination.id } })).balance), 250)
       await json(await transactions.POST(request({ mode: 'PAYMENT', amount: 10, name: 'Invalid', date: '2026-09-20', accountId: source.id, creditCardId: quickCard.id })), 400)
@@ -74,6 +75,27 @@ test('variable bills, usage, repayments and lending remain consistent', async t 
       assert.ok(history.transactions.some(item => item.name === 'Groceries' && item.account?.name === 'Quick source' && item.date === '2026-09-20T14:35:00.000Z'))
       assert.ok(history.transactions.some(item => item.name === 'Hosting' && item.creditCard?.name === 'Quick card'))
       assert.ok(history.transactions.some(item => item.name === 'Move to savings' && item.toAccount?.name === 'Quick destination'))
+
+      await json(await transactionDetail.PATCH(request({ mode: 'PAYMENT', amount: 150, name: 'Groceries and supplies', date: '2026-09-21', occurredAt: '2026-09-21T09:15:00.000Z', accountId: source.id }, 'PATCH'), params(groceries.id)))
+      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 650)
+      const edited = await prisma.transaction.findUnique({ where: { id: groceries.id } })
+      assert.equal(edited.name, 'Groceries and supplies')
+      assert.equal(Number(edited.amount), 150)
+      assert.equal(edited.date.toISOString(), '2026-09-21T09:15:00.000Z')
+
+      await json(await transactionDetail.DELETE(request({}, 'DELETE'), params(hosting.id)))
+      const cardAfterDelete = await prisma.creditCard.findUnique({ where: { id: quickCard.id } })
+      assert.equal(Number(cardAfterDelete.usedLimit), 100)
+      assert.equal(Number(cardAfterDelete.expectedDue), 100)
+
+      await json(await transactionDetail.DELETE(request({}, 'DELETE'), params(transfer.id)))
+      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 850)
+      assert.equal(Number((await prisma.account.findUnique({ where: { id: destination.id } })).balance), 50)
+
+      const automatic = await prisma.transaction.create({ data: { userId, accountId: source.id, managedPayment: true, type: 'EXPENSE', amount: 10, name: 'Automatic bill', date: new Date() } })
+      await json(await transactionDetail.DELETE(request({}, 'DELETE'), params(automatic.id)), 400)
+      assert.ok(await prisma.transaction.findUnique({ where: { id: automatic.id } }))
+      await prisma.transaction.delete({ where: { id: automatic.id } })
     })
     await t.test('pay later accepts a usage estimate and separate bill/minimum', async () => {
       card = await json(await cards.POST(request({ name: 'Pay Later', bank: 'Provider', type: 'PAYLATER', totalLimit: 5000, usedLimit: 500, dueAmount: 200, minimumDue: 50, dueDate: 20, statementDate: 5, billDueDate: '2026-09-20' })), 201)

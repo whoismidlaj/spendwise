@@ -5,7 +5,7 @@ import { prisma, toJson } from '@/lib/prisma'
 import { atomic, PaymentError } from '@/lib/payments'
 import { z } from 'zod'
 
-const quickTransactionSchema = z.object({
+export const quickTransactionSchema = z.object({
   mode: z.enum(['PAYMENT', 'TRANSFER']),
   amount: z.number().finite().positive().multipleOf(0.01),
   name: z.string().trim().min(1).max(100),

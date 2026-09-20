@@ -28,6 +28,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell flex min-w-0 flex-col overflow-x-hidden">
       <TopBar title={title} />
+      <div className="top-bar-spacer shrink-0" aria-hidden="true" />
       <main className={cn("min-w-0 flex-1 overflow-x-hidden overflow-y-auto", "safe-bottom")}>
         {children}
       </main>

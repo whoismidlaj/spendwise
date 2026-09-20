@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowDownLeft, ArrowRightLeft, CreditCard, ReceiptText } from 'lucide-react'
-import { Badge, Card } from '@/components/ui'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowDownLeft, ArrowRightLeft, CreditCard, MoreVertical, Pencil, ReceiptText, Trash2 } from 'lucide-react'
+import { Badge, Button, Card, FAB, Sheet } from '@/components/ui'
+import { EditableQuickTransaction, QuickTransactionForm } from '@/components/QuickTransactionForm'
 import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
@@ -46,13 +47,47 @@ export default function TransactionHistoryPage() {
   const [filter, setFilter] = useState<Filter>('ALL')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
+  const [actionTransaction, setActionTransaction] = useState<Transaction | null>(null)
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [actionError, setActionError] = useState('')
 
-  useEffect(() => {
-    fetch('/api/transactions?limit=200').then(async response => {
+  const loadTransactions = useCallback(() => {
+    setLoading(true)
+    setError('')
+    return fetch('/api/transactions?limit=200').then(async response => {
       if (!response.ok) throw new Error((await response.json()).error || 'Unable to load history')
       return response.json()
     }).then(data => setTransactions(data.transactions || [])).catch(cause => setError(cause instanceof Error ? cause.message : 'Unable to load history')).finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    void loadTransactions()
+  }, [loadTransactions])
+
+  function closeActions() {
+    setActionTransaction(null)
+    setConfirmingDelete(false)
+    setActionError('')
+  }
+
+  async function deleteTransaction() {
+    if (!actionTransaction) return
+    setDeleting(true)
+    setActionError('')
+    try {
+      const response = await fetch(`/api/transactions/${actionTransaction.id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error((await response.json()).error || 'Unable to delete transaction')
+      closeActions()
+      await loadTransactions()
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : 'Unable to delete transaction')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const groups = useMemo(() => {
     const filtered = filter === 'ALL' ? transactions : transactions.filter(item => item.type === filter)
@@ -77,10 +112,28 @@ export default function TransactionHistoryPage() {
           return <div key={item.id} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-3">
             <div className={cn('flex h-9 w-9 items-center justify-center rounded-full', item.type === 'INCOME' ? 'bg-success/10 text-success' : item.type === 'EXPENSE' ? 'bg-danger/10 text-danger' : 'bg-primary/10 text-primary')}><Icon size={16} /></div>
             <div className="min-w-0"><div className="flex min-w-0 items-center gap-1.5"><p className="truncate text-sm font-semibold">{item.name}</p>{item.managedPayment && <Badge className="shrink-0 bg-surface-offset px-1.5 text-[9px] text-gray-500 dark:bg-gray-800">Auto</Badge>}</div><p className="truncate text-[11px] text-gray-500">{sourceLabel(item)}</p></div>
-            <div className="shrink-0 whitespace-nowrap text-right"><p className={cn('text-sm font-bold tabular-nums', item.type === 'INCOME' ? 'text-success' : item.type === 'EXPENSE' ? 'text-danger' : '')}>{item.type === 'INCOME' ? '+' : item.type === 'EXPENSE' ? '−' : ''}{formatCurrency(item.amount)}</p><p className="text-[9px] text-gray-400">{new Date(item.date).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</p></div>
+            <div className="shrink-0 whitespace-nowrap text-right"><p className={cn('text-sm font-bold tabular-nums', item.type === 'INCOME' ? 'text-success' : item.type === 'EXPENSE' ? 'text-danger' : '')}>{item.type === 'INCOME' ? '+' : item.type === 'EXPENSE' ? '−' : ''}{formatCurrency(item.amount)}</p><div className="flex items-center justify-end gap-0.5"><p className="text-[9px] text-gray-400">{new Date(item.date).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</p>{!item.managedPayment && item.type !== 'INCOME' && <button type="button" onClick={() => { setActionTransaction(item); setConfirmingDelete(false); setActionError('') }} className="-mr-2 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-surface-offset hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" aria-label={`Edit or delete ${item.name}`}><MoreVertical size={17} /></button>}</div></div>
           </div>
         })}
       </Card>
     </section>)}
+    <FAB onClick={() => setAddOpen(true)} />
+    <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Add transaction">
+      <QuickTransactionForm onSuccess={() => { setAddOpen(false); void loadTransactions() }} />
+    </Sheet>
+    <Sheet open={Boolean(editingTransaction)} onClose={() => setEditingTransaction(null)} title="Edit transaction">
+      {editingTransaction && <QuickTransactionForm transaction={editingTransaction as EditableQuickTransaction} onSuccess={() => { setEditingTransaction(null); void loadTransactions() }} />}
+    </Sheet>
+    <Sheet open={Boolean(actionTransaction)} onClose={closeActions} title={confirmingDelete ? 'Delete transaction?' : 'Transaction options'}>
+      {actionTransaction && (confirmingDelete ? <div className="space-y-4 pb-4">
+        <div className="rounded-xl bg-danger/5 p-4"><p className="font-semibold">Delete “{actionTransaction.name}”?</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-300">This removes the history entry and reverses its bank balance or card usage adjustment.</p></div>
+        {actionError && <p role="alert" className="text-sm text-danger">{actionError}</p>}
+        <div className="grid grid-cols-2 gap-3"><Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)}>Cancel</Button><Button type="button" variant="danger" loading={deleting} onClick={deleteTransaction}>Delete</Button></div>
+      </div> : <div className="space-y-3 pb-4">
+        <div className="rounded-xl bg-surface-offset p-3 dark:bg-gray-800"><p className="truncate text-sm font-semibold">{actionTransaction.name}</p><p className="mt-0.5 text-xs text-gray-500">{formatCurrency(actionTransaction.amount)} · {sourceLabel(actionTransaction)}</p></div>
+        <Button type="button" variant="outline" size="lg" className="gap-2" onClick={() => { setEditingTransaction(actionTransaction); closeActions() }}><Pencil size={17} /> Edit transaction</Button>
+        <Button type="button" variant="danger" size="lg" className="gap-2" onClick={() => setConfirmingDelete(true)}><Trash2 size={17} /> Delete transaction</Button>
+      </div>)}
+    </Sheet>
   </div>
 }

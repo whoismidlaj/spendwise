@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/currency'
-import { Card, Button, Sheet, Input, Select, Badge, ProgressBar } from '@/components/ui'
+import { Card, Button, Sheet, Input, Select, Badge, DatePicker, ProgressBar } from '@/components/ui'
 import { ChevronDown, ChevronRight, Edit2, HandCoins, Plus, ReceiptText, Trash2 } from 'lucide-react'
 import { CardPaymentForm } from '@/components/CardPaymentForm'
 import { InstitutionLogo } from '@/components/InstitutionLogo'
@@ -113,7 +113,7 @@ function CreditCardForm({ onSuccess, initial }: { onSuccess: () => void; initial
       <Input id="card-expected-due" label="Expected Due (optional override)" type="number" min="0" step="0.01" value={form.expectedDue} onChange={f('expectedDue')} placeholder="Automatic from usage" />
       <Input id="card-dueAmount" label="Actual Bill Remaining" type="number" min="0" step="0.01" value={form.dueAmount} onChange={f('dueAmount')} />
       <Input id="card-minimumDue" label="Minimum Due Amount" type="number" min="0" step="0.01" value={form.minimumDue} onChange={f('minimumDue')} />
-      <Input id="card-bill-due-date" label="Current Bill Due Date (optional)" type="date" value={form.billDueDate} onChange={f('billDueDate')} />
+      <DatePicker label="Current Bill Due Date (optional)" value={form.billDueDate} onChange={f('billDueDate')} />
       <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
         <Input id="card-dueDate" label="Due Date (day)" type="number" min="1" max="31" value={form.dueDate} onChange={f('dueDate')} required />
         <Input id="card-statementDate" label="Statement Date (day)" type="number" min="1" max="31" value={form.statementDate} onChange={f('statementDate')} required />

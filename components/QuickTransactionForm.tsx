@@ -2,12 +2,30 @@
 
 import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
-import { Button, Input } from '@/components/ui'
+import { Button, DatePicker, Input, TimePicker } from '@/components/ui'
 import { InstitutionLogo } from '@/components/InstitutionLogo'
 import { cn } from '@/lib/utils'
 
 type Account = { id: string; name: string; institution?: string; type?: string }
 type CreditCard = { id: string; name: string; bank: string; institution?: string; type: 'CARD' | 'PAYLATER' }
+export type EditableQuickTransaction = {
+  id: string
+  type: 'EXPENSE' | 'TRANSFER'
+  amount: number
+  name: string
+  date: string
+  account?: { id: string } | null
+  toAccount?: { id: string } | null
+  creditCard?: { id: string } | null
+}
+
+function dateParts(value?: string) {
+  const date = value ? new Date(value) : new Date()
+  return {
+    date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
+    time: `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`,
+  }
+}
 
 function AccountPicker({ accounts, value, onChange, label, excludeId }: { accounts: Account[]; value: string; onChange: (id: string) => void; label: string; excludeId?: string }) {
   const available = accounts.filter(account => account.id !== excludeId)
@@ -32,18 +50,16 @@ function CardPicker({ cards, value, onChange }: { cards: CreditCard[]; value: st
   })}</div>}</div>
 }
 
-export function QuickTransactionForm({ onSuccess }: { onSuccess: () => void }) {
+export function QuickTransactionForm({ onSuccess, transaction }: { onSuccess: () => void; transaction?: EditableQuickTransaction }) {
+  const initialDate = dateParts(transaction?.date)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [cards, setCards] = useState<CreditCard[]>([])
-  const [mode, setMode] = useState<'PAYMENT' | 'TRANSFER'>('PAYMENT')
-  const [source, setSource] = useState<'ACCOUNT' | 'CARD'>('ACCOUNT')
-  const [amount, setAmount] = useState('')
-  const [name, setName] = useState('')
-  const [date, setDate] = useState(() => new Date().toLocaleDateString('en-CA'))
-  const [time, setTime] = useState(() => {
-    const now = new Date()
-    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-  })
+  const [mode, setMode] = useState<'PAYMENT' | 'TRANSFER'>(transaction?.type === 'TRANSFER' ? 'TRANSFER' : 'PAYMENT')
+  const [source, setSource] = useState<'ACCOUNT' | 'CARD'>(transaction?.creditCard ? 'CARD' : 'ACCOUNT')
+  const [amount, setAmount] = useState(transaction ? String(transaction.amount) : '')
+  const [name, setName] = useState(transaction?.name || '')
+  const [date, setDate] = useState(initialDate.date)
+  const [time, setTime] = useState(initialDate.time)
   const [accountId, setAccountId] = useState('')
   const [creditCardId, setCreditCardId] = useState('')
   const [toAccountId, setToAccountId] = useState('')
@@ -56,18 +72,18 @@ export function QuickTransactionForm({ onSuccess }: { onSuccess: () => void }) {
       .then(([loadedAccounts, loadedCards]) => {
         setAccounts(loadedAccounts)
         setCards(loadedCards)
-        setAccountId(loadedAccounts[0]?.id || '')
-        setToAccountId(loadedAccounts[1]?.id || '')
-        setCreditCardId(loadedCards[0]?.id || '')
+        setAccountId(transaction?.account?.id || loadedAccounts[0]?.id || '')
+        setToAccountId(transaction?.toAccount?.id || loadedAccounts.find(account => account.id !== transaction?.account?.id)?.id || '')
+        setCreditCardId(transaction?.creditCard?.id || loadedCards[0]?.id || '')
       })
       .catch(() => setError('Unable to load accounts'))
-  }, [])
+  }, [transaction])
 
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setLoading(true); setError('')
     try {
-      const response = await fetch('/api/transactions', {
-        method: 'POST',
+      const response = await fetch(transaction ? `/api/transactions/${transaction.id}` : '/api/transactions', {
+        method: transaction ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode, amount: Number(amount), name, date,
@@ -77,10 +93,10 @@ export function QuickTransactionForm({ onSuccess }: { onSuccess: () => void }) {
           toAccountId: mode === 'TRANSFER' ? toAccountId : null,
         }),
       })
-      if (!response.ok) throw new Error((await response.json()).error || 'Unable to save payment')
+      if (!response.ok) throw new Error((await response.json()).error || 'Unable to save transaction')
       onSuccess()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to save payment')
+      setError(cause instanceof Error ? cause.message : 'Unable to save transaction')
     } finally {
       setLoading(false)
     }
@@ -99,12 +115,12 @@ export function QuickTransactionForm({ onSuccess }: { onSuccess: () => void }) {
     </div>}
     <Input label="Amount" type="number" inputMode="decimal" min="0.01" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} placeholder="0.00" className="text-2xl font-bold tabular-nums" required />
     <Input label={mode === 'TRANSFER' ? 'Transfer note' : 'What did you pay for?'} value={name} onChange={event => setName(event.target.value)} placeholder={mode === 'TRANSFER' ? 'e.g. Move to savings' : 'e.g. Groceries'} required />
-    <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-3"><Input label="Date" type="date" value={date} onChange={event => setDate(event.target.value)} required /><Input label="Time" type="time" value={time} onChange={event => setTime(event.target.value)} required /></div>
+    <div className="grid grid-cols-[minmax(0,1fr)_128px] gap-3"><DatePicker label="Date" value={date} onChange={event => setDate(event.target.value)} required /><TimePicker label="Time" value={time} onChange={event => setTime(event.target.value)} /></div>
     {mode === 'PAYMENT' && source === 'ACCOUNT' && <AccountPicker accounts={accounts} value={accountId} onChange={setAccountId} label="Paid from" />}
     {mode === 'PAYMENT' && source === 'CARD' && <CardPicker cards={cards} value={creditCardId} onChange={setCreditCardId} />}
     {mode === 'TRANSFER' && <div className="space-y-3"><AccountPicker accounts={accounts} value={accountId} onChange={id => { setAccountId(id); if (toAccountId === id) setToAccountId(accounts.find(account => account.id !== id)?.id || '') }} label="From account" /><AccountPicker accounts={accounts} value={toAccountId} onChange={setToAccountId} label="To account" excludeId={accountId} /></div>}
     {mode === 'PAYMENT' && source === 'CARD' && <p className="text-xs text-gray-500">This increases current usage and the expected due. Your issued bill and minimum due stay unchanged.</p>}
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    <Button type="submit" size="lg" loading={loading} disabled={!canSubmit}>{mode === 'TRANSFER' ? 'Record transfer' : 'Add payment'}</Button>
+    <Button type="submit" size="lg" loading={loading} disabled={!canSubmit}>{transaction ? 'Save changes' : mode === 'TRANSFER' ? 'Record transfer' : 'Add payment'}</Button>
   </form>
 }
