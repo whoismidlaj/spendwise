@@ -7,6 +7,7 @@ import { Trash2, Edit2, Search, CheckCircle, RefreshCw, Landmark } from 'lucide-
 import { cn } from '@/lib/utils'
 
 interface Transaction {
+  managedPayment?: boolean
   id: string; name: string; amount: number; type: string; date: string
   description?: string
   accountId?: string
@@ -344,10 +345,10 @@ export default function TransactionsPage() {
                           {tx.type === 'INCOME' ? '+' : '-'}{formatCurrency(tx.amount)}
                         </span>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 md:flex transition-opacity">
-                          <button onClick={() => setEditTx(tx)} className="p-1.5 hover:bg-surface-offset dark:hover:bg-gray-800 rounded-lg" title="Edit">
+                          <button disabled={tx.managedPayment} onClick={() => setEditTx(tx)} className="p-1.5 hover:bg-surface-offset dark:hover:bg-gray-800 rounded-lg" title="Edit">
                             <Edit2 size={13} className="text-gray-400" />
                           </button>
-                          <button onClick={() => deleteTx(tx.id)} className="p-1.5 hover:bg-surface-offset dark:hover:bg-gray-800 rounded-lg" title="Delete">
+                          <button disabled={tx.managedPayment} onClick={() => deleteTx(tx.id)} className="p-1.5 hover:bg-surface-offset dark:hover:bg-gray-800 rounded-lg" title="Delete">
                             <Trash2 size={13} className="text-danger" />
                           </button>
                         </div>

@@ -14,6 +14,8 @@ interface DebtPayment {
 }
 
 interface Debt {
+  direction: 'BORROWED' | 'LENT'
+  isActive: boolean
   id: string
   name: string
   type: 'PERSONAL' | 'LOAN' | 'CREDIT_LINE' | 'PAY_LATER'
@@ -127,12 +129,15 @@ export default function DebtsPage() {
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
 
   // Filter & Sort States for Debts
+  const [directionFilter, setDirectionFilter] = useState<'ALL' | Debt['direction']>('ALL')
+  const [error, setError] = useState('')
   const [typeFilter, setTypeFilter] = useState<'ALL' | Debt['type']>('ALL')
   const [sortBy, setSortBy] = useState<'priority' | 'date' | 'amount' | 'created'>('priority')
 
   // Add Debt Form State
   const [debtForm, setDebtForm] = useState({
     name: '',
+    direction: 'BORROWED' as Debt['direction'],
     type: 'PERSONAL' as Debt['type'],
     amount: '',
     remaining: '',
@@ -148,6 +153,7 @@ export default function DebtsPage() {
   // Edit Debt Form State
   const [editForm, setEditForm] = useState({
     name: '',
+    direction: 'BORROWED' as Debt['direction'],
     type: 'PERSONAL' as Debt['type'],
     amount: '',
     remaining: '',
@@ -198,6 +204,8 @@ export default function DebtsPage() {
       setAccounts(accsRes || [])
       setCreditCards(cardsRes || [])
       setRecurringList(recRes || [])
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unable to save changes')
     } finally {
       setLoading(false)
     }
@@ -264,7 +272,9 @@ export default function DebtsPage() {
   }, [tab, loadUpcoming])
 
   // AGGREGATED DEBT CALCULATIONS
-  const personalDebtsTotal = debts.reduce((sum, d) => sum + Number(d.remaining || 0), 0)
+  const activeDebts = debts.filter(d => d.isActive && Number(d.remaining) > 0)
+  const lentTotal = activeDebts.filter(d => d.direction === 'LENT').reduce((sum, d) => sum + Number(d.remaining), 0)
+  const personalDebtsTotal = activeDebts.filter(d => d.direction !== 'LENT').reduce((sum, d) => sum + Number(d.remaining || 0), 0)
   
   const creditCardsTotal = creditCards.reduce((sum, c) => {
     const used = Number(c.usedLimit || 0)
@@ -281,6 +291,13 @@ export default function DebtsPage() {
 
   const totalAggregatedDebt = personalDebtsTotal + creditCardsTotal + loansRemainingTotal
 
+  async function saveRequest(url: string, options: RequestInit) {
+    setError('')
+    const response = await fetch(url, options)
+    if (!response.ok) throw new Error((await response.json()).error || 'Unable to save changes')
+    return response
+  }
+
   // Handlers for Debts
   async function handleAddDebt(e: React.FormEvent) {
     e.preventDefault()
@@ -288,6 +305,7 @@ export default function DebtsPage() {
     try {
       const payload: any = {
         name: debtForm.name,
+        direction: debtForm.direction,
         type: debtForm.type,
         amount: parseFloat(debtForm.amount),
         interestRate: parseFloat(debtForm.interestRate) || 0,
@@ -302,7 +320,7 @@ export default function DebtsPage() {
         payload.deadline = debtForm.deadline
       }
 
-      await fetch('/api/debts', {
+      await saveRequest('/api/debts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -311,6 +329,7 @@ export default function DebtsPage() {
       setAddSheetOpen(false)
       setDebtForm({
         name: '',
+        direction: 'BORROWED',
         type: 'PERSONAL',
         amount: '',
         remaining: '',
@@ -323,6 +342,8 @@ export default function DebtsPage() {
         description: '',
       })
       loadData()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unable to save changes')
     } finally {
       setLoading(false)
     }
@@ -332,6 +353,7 @@ export default function DebtsPage() {
     setEditingDebt(debt)
     setEditForm({
       name: debt.name,
+      direction: debt.direction,
       type: debt.type,
       amount: String(debt.amount),
       remaining: String(debt.remaining),
@@ -353,6 +375,7 @@ export default function DebtsPage() {
     try {
       const payload: any = {
         name: editForm.name,
+        direction: editForm.direction,
         type: editForm.type,
         amount: parseFloat(editForm.amount),
         remaining: parseFloat(editForm.remaining),
@@ -370,7 +393,7 @@ export default function DebtsPage() {
         payload.paymentAmount = null
       }
 
-      await fetch(`/api/debts/${editingDebt.id}`, {
+      await saveRequest(`/api/debts/${editingDebt.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -379,6 +402,8 @@ export default function DebtsPage() {
       setEditSheetOpen(false)
       setEditingDebt(null)
       loadData()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unable to save changes')
     } finally {
       setLoading(false)
     }
@@ -389,7 +414,7 @@ export default function DebtsPage() {
     if (!selectedDebt) return
     setLoading(true)
     try {
-      await fetch(`/api/debts/${selectedDebt.id}/pay`, {
+      await saveRequest(`/api/debts/${selectedDebt.id}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -403,6 +428,8 @@ export default function DebtsPage() {
       setPaymentAmount('')
       setPaymentAccountId('')
       loadData()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unable to save changes')
     } finally {
       setLoading(false)
     }
@@ -435,7 +462,7 @@ export default function DebtsPage() {
     setPayModalLoading(true)
     try {
       if (payModalItem.source === 'CREDIT_CARD') {
-        await fetch(`/api/credit-cards/${payModalItem.sourceId}/pay`, {
+        await saveRequest(`/api/credit-cards/${payModalItem.sourceId}/pay`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -444,7 +471,7 @@ export default function DebtsPage() {
           }),
         })
       } else if (payModalItem.source === 'DEBT') {
-        await fetch(`/api/debts/${payModalItem.sourceId}/pay`, {
+        await saveRequest(`/api/debts/${payModalItem.sourceId}/pay`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -456,6 +483,8 @@ export default function DebtsPage() {
       setPayModalItem(null)
       loadUpcoming()
       loadData()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unable to save changes')
     } finally {
       setPayModalLoading(false)
     }
@@ -466,6 +495,7 @@ export default function DebtsPage() {
       ...p,
       debtName: d.name,
       debtType: d.type,
+      direction: d.direction,
     }))
   )
 
@@ -473,7 +503,8 @@ export default function DebtsPage() {
     (a, b) => new Date(b.paidDate).getTime() - new Date(a.paidDate).getTime()
   )
 
-  const filteredDebts = debts.filter((d) => {
+  const filteredDebts = activeDebts.filter((d) => {
+    if (directionFilter !== 'ALL' && d.direction !== directionFilter) return false
     if (typeFilter === 'ALL') return true
     return d.type === typeFilter
   })
@@ -523,7 +554,7 @@ export default function DebtsPage() {
                 : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
             )}
           >
-            Debts & Liabilities
+            Debts & Lending
           </button>
           <button
             onClick={() => setTab('upcoming')}
@@ -574,7 +605,7 @@ export default function DebtsPage() {
             </div>
             <div className="text-right">
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white/20 text-white backdrop-blur-sm">
-                {debts.length} active {debts.length === 1 ? 'debt' : 'debts'}
+                {activeDebts.length} active records
               </span>
             </div>
           </div>
@@ -597,9 +628,15 @@ export default function DebtsPage() {
         </Card>
       </div>
 
+      <div className="px-4 mb-4"><Card className="p-4"><p className="text-xs text-gray-500">Owed to me</p><p className="text-xl font-bold text-success">{formatCurrency(lentTotal)}</p><p className="text-xs text-gray-400">Money you lent, separate from your liabilities.</p></Card></div>
+      {error && <p role="alert" className="px-4 py-2 text-sm text-danger">{error}</p>}
+
       {/* TAB 1: ACTIVE DEBTS & LIABILITIES */}
       {tab === 'active' && (
         <div className="px-4 space-y-4">
+          <Select id="debt-direction-filter" label="Show" value={directionFilter} onChange={e => setDirectionFilter(e.target.value as typeof directionFilter)}>
+            <option value="ALL">All debts and lending</option><option value="BORROWED">I owe</option><option value="LENT">Owed to me</option>
+          </Select>
           {/* Type Filter Tabs */}
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
             <button
@@ -611,7 +648,7 @@ export default function DebtsPage() {
                   : 'bg-surface-offset dark:bg-gray-800 border-border dark:border-gray-700 text-gray-600 dark:text-gray-300'
               )}
             >
-              All ({debts.length})
+              All ({activeDebts.length})
             </button>
             {(['PERSONAL', 'LOAN', 'CREDIT_LINE', 'PAY_LATER'] as const)
               .filter((t) => debts.some((d) => d.type === t))
@@ -689,7 +726,7 @@ export default function DebtsPage() {
                               color: TYPE_COLORS[debt.type] || '#6b7280',
                             }}
                           >
-                            {TYPE_LABELS[debt.type]}
+                            {debt.direction === 'LENT' ? 'Owed to me' : 'I owe'} · {TYPE_LABELS[debt.type]}
                           </Badge>
                           <Badge
                             style={{
@@ -717,7 +754,7 @@ export default function DebtsPage() {
                     <div>
                       <ProgressBar value={pct} max={100} className="mb-1.5" />
                       <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                        <span>{pct}% paid off</span>
+                        <span>{pct}% {debt.direction === 'LENT' ? 'repaid to you' : 'paid off'}</span>
                         <span>{formatCurrency(paidAmount)} paid</span>
                       </div>
                     </div>
@@ -759,19 +796,22 @@ export default function DebtsPage() {
                           <Trash2 size={13} />
                         </Button>
                         <Button
+                          id={`record-debt-payment-${debt.id}`}
                           size="sm"
                           onClick={() => {
+                            setError('')
+                            setPaymentDate(new Date().toISOString().slice(0, 10))
                             setSelectedDebt(debt)
                             setPaymentAmount(
                               debt.paymentAmount
-                                ? String(debt.paymentAmount)
+                                ? String(Math.min(debt.paymentAmount, debt.remaining))
                                 : String(debt.remaining)
                             )
                             setPaySheetOpen(true)
                           }}
                           className="gap-1 text-xs py-1 px-3 min-h-[32px]"
                         >
-                          <CheckCircle size={13} /> Pay
+                          <CheckCircle size={13} /> {debt.direction === 'LENT' ? 'Receive' : 'Pay'}
                         </Button>
                       </div>
                     </div>
@@ -850,6 +890,9 @@ export default function DebtsPage() {
             </div>
           </Card>
 
+          <Select id="debt-direction-filter" label="Show" value={directionFilter} onChange={e => setDirectionFilter(e.target.value as typeof directionFilter)}>
+            <option value="ALL">All debts and lending</option><option value="BORROWED">I owe</option><option value="LENT">Owed to me</option>
+          </Select>
           {/* Type Filter Tabs */}
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
             <button
@@ -1053,7 +1096,7 @@ export default function DebtsPage() {
                     </p>
                   </div>
                   <p className="font-bold text-success tabular-nums">
-                    +{formatCurrency(p.amount)}
+                    {p.direction === 'LENT' ? 'Received ' : 'Paid '}{formatCurrency(p.amount)}
                   </p>
                 </div>
               ))}
@@ -1063,13 +1106,19 @@ export default function DebtsPage() {
       )}
 
       {/* Add Debt Sheet */}
-      <Sheet open={addSheetOpen} onClose={() => setAddSheetOpen(false)} title="Add Debt / Liability">
+      <Sheet open={addSheetOpen} onClose={() => setAddSheetOpen(false)} title="Add Debt / Lending">
         <form onSubmit={handleAddDebt} className="space-y-4 pb-6">
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+          <Select id="add-debt-direction" label="Direction" value={debtForm.direction} onChange={e => setDebtForm(p => ({ ...p, direction: e.target.value as Debt['direction'] }))}>
+            <option value="BORROWED">I owe — money I borrowed</option>
+            <option value="LENT">Owed to me — money I lent</option>
+          </Select>
+          <p className="text-xs text-gray-500">Track an existing balance. Adding this record does not move money between accounts.</p>
           <Input
             label="Name / Title"
             value={debtForm.name}
             onChange={(e) => setDebtForm((p) => ({ ...p, name: e.target.value }))}
-            placeholder="e.g. Loan from Rahul, Car Loan"
+            placeholder="e.g. Rahul, Car Loan"
             required
           />
 
@@ -1087,8 +1136,10 @@ export default function DebtsPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Total Debt Amount"
+              label="Original Amount"
               type="number"
+              min="0"
+              step="0.01"
               value={debtForm.amount}
               onChange={(e) => setDebtForm((p) => ({ ...p, amount: e.target.value }))}
               placeholder="0.00"
@@ -1132,6 +1183,8 @@ export default function DebtsPage() {
               <Input
                 label="Monthly Amount"
                 type="number"
+                min="0.01"
+                step="0.01"
                 value={debtForm.paymentAmount}
                 onChange={(e) => setDebtForm((p) => ({ ...p, paymentAmount: e.target.value }))}
                 placeholder="0.00"
@@ -1171,13 +1224,19 @@ export default function DebtsPage() {
       </Sheet>
 
       {/* Edit Debt Sheet */}
-      <Sheet open={editSheetOpen} onClose={() => setEditSheetOpen(false)} title="Edit Debt / Liability">
+      <Sheet open={editSheetOpen} onClose={() => setEditSheetOpen(false)} title="Edit Debt / Lending">
         <form onSubmit={handleSaveEdit} className="space-y-4 pb-6">
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+          <Select id="edit-debt-direction" label="Direction" value={editForm.direction} onChange={e => setEditForm(p => ({ ...p, direction: e.target.value as Debt['direction'] }))}>
+            <option value="BORROWED">I owe — money I borrowed</option>
+            <option value="LENT">Owed to me — money I lent</option>
+          </Select>
+          <p className="text-xs text-gray-500">Track an existing balance. Adding this record does not move money between accounts.</p>
           <Input
             label="Name / Title"
             value={editForm.name}
             onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
-            placeholder="e.g. Loan from Rahul, Car Loan"
+            placeholder="e.g. Rahul, Car Loan"
             required
           />
 
@@ -1197,6 +1256,8 @@ export default function DebtsPage() {
             <Input
               label="Total Principal Amount"
               type="number"
+              min="0"
+              step="0.01"
               value={editForm.amount}
               onChange={(e) => setEditForm((p) => ({ ...p, amount: e.target.value }))}
               placeholder="0.00"
@@ -1205,6 +1266,8 @@ export default function DebtsPage() {
             <Input
               label="Remaining Balance"
               type="number"
+              min="0"
+              step="0.01"
               value={editForm.remaining}
               onChange={(e) => setEditForm((p) => ({ ...p, remaining: e.target.value }))}
               placeholder="0.00"
@@ -1249,6 +1312,8 @@ export default function DebtsPage() {
               <Input
                 label="Monthly Amount"
                 type="number"
+                min="0.01"
+                step="0.01"
                 value={editForm.paymentAmount}
                 onChange={(e) => setEditForm((p) => ({ ...p, paymentAmount: e.target.value }))}
                 placeholder="0.00"
@@ -1288,9 +1353,10 @@ export default function DebtsPage() {
       </Sheet>
 
       {/* Record Debt Payment Sheet */}
-      <Sheet open={paySheetOpen} onClose={() => setPaySheetOpen(false)} title="Record Debt Payment">
+      <Sheet open={paySheetOpen} onClose={() => setPaySheetOpen(false)} title={selectedDebt?.direction === 'LENT' ? "Receive Repayment" : "Record Debt Payment"}>
         {selectedDebt && (
           <form onSubmit={handleRecordPayment} className="space-y-4 pb-6">
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
             <div className="p-3 bg-surface-offset dark:bg-gray-800/60 rounded-xl space-y-1">
               <p className="text-xs text-gray-500 dark:text-gray-400">Recording payment for</p>
               <p className="font-bold text-base dark:text-white">{selectedDebt.name}</p>
@@ -1310,11 +1376,11 @@ export default function DebtsPage() {
             />
 
             <Select
-              label="Deduct From Account"
+              label={selectedDebt.direction === 'LENT' ? "Receive Into Account" : "Deduct From Account"}
               value={paymentAccountId}
               onChange={(e) => setPaymentAccountId(e.target.value)}
             >
-              <option value="">None (Paid externally / Cash)</option>
+              <option value="">None (Settled externally / Cash)</option>
               {accounts.map((acc) => (
                 <option key={acc.id} value={acc.id}>
                   {acc.name}
@@ -1331,7 +1397,7 @@ export default function DebtsPage() {
             />
 
             <Button type="submit" size="lg" loading={loading}>
-              Confirm & Record Payment
+              {selectedDebt.direction === 'LENT' ? 'Confirm Repayment Received' : 'Confirm & Record Payment'}
             </Button>
           </form>
         )}
@@ -1345,6 +1411,7 @@ export default function DebtsPage() {
       >
         {payModalItem && (
           <form onSubmit={handleExecutePayUpcoming} className="space-y-4 pb-6">
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
             <div className="p-3 bg-surface-offset dark:bg-gray-800/60 rounded-xl space-y-1">
               <p className="text-xs text-gray-500 dark:text-gray-400">{payModalItem.typeLabel}</p>
               <p className="font-bold text-base dark:text-white">{payModalItem.name}</p>

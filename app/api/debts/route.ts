@@ -6,13 +6,14 @@ import { z } from 'zod'
 
 const debtSchema = z.object({
   name: z.string().min(1),
+  direction: z.enum(['BORROWED', 'LENT']).default('BORROWED'),
   type: z.enum(['PERSONAL', 'LOAN', 'CREDIT_LINE', 'PAY_LATER']),
-  amount: z.number().positive(),
-  interestRate: z.number().nonnegative().default(0),
+  amount: z.number().finite().multipleOf(0.01).positive(),
+  interestRate: z.number().finite().multipleOf(0.01).nonnegative().default(0),
   isRecurring: z.boolean().default(false),
-  paymentDate: z.number().min(1).max(31).nullable().optional(),
-  paymentAmount: z.number().positive().nullable().optional(),
-  deadline: z.string().nullable().optional(),
+  paymentDate: z.number().int().min(1).max(31).nullable().optional(),
+  paymentAmount: z.number().finite().multipleOf(0.01).positive().nullable().optional(),
+  deadline: z.string().date().nullable().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
   description: z.string().nullable().optional(),
 })
@@ -22,7 +23,7 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const debts = await prisma.debt.findMany({
-    where: { userId: session.user.id, isActive: true },
+    where: { userId: session.user.id },
     orderBy: { createdAt: 'desc' },
     include: {
       payments: {

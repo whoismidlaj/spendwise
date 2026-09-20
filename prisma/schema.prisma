@@ -54,6 +54,8 @@ model CreditCard {
   totalLimit    Decimal  @db.Decimal(15, 2)
   usedLimit     Decimal  @db.Decimal(15, 2) @default(0)
   dueAmount     Decimal  @db.Decimal(15, 2) @default(0)
+  expectedDue   Decimal? @db.Decimal(15, 2)
+  billDueDate   DateTime?
   minimumDue    Decimal  @db.Decimal(15, 2) @default(0)
   dueDate       Int
   statementDate Int
@@ -85,6 +87,7 @@ model Transaction {
   id           String          @id @default(cuid())
   userId       String
   accountId    String?
+  managedPayment Boolean       @default(false)
   toAccountId  String?
   creditCardId String?
   categoryId   String?
@@ -171,6 +174,11 @@ enum DebtType {
   PAY_LATER
 }
 
+enum DebtDirection {
+  BORROWED
+  LENT
+}
+
 enum DebtPriority {
   LOW
   MEDIUM
@@ -181,6 +189,7 @@ model Debt {
   id            String       @id @default(cuid())
   userId        String
   name          String
+  direction     DebtDirection @default(BORROWED)
   type          DebtType
   amount        Decimal      @db.Decimal(15, 2)
   remaining     Decimal      @db.Decimal(15, 2)

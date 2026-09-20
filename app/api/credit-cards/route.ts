@@ -2,20 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
-import { z } from 'zod'
-
-const cardSchema = z.object({
-  name: z.string().min(1),
-  bank: z.string().min(1),
-  totalLimit: z.number().positive(),
-  usedLimit: z.number().min(0).default(0),
-  dueAmount: z.number().min(0).default(0),
-  minimumDue: z.number().min(0).default(0),
-  dueDate: z.number().min(1).max(31),
-  statementDate: z.number().min(1).max(31),
-  color: z.string().default('#006494'),
-  type: z.enum(['CARD', 'PAYLATER']).default('CARD'),
-})
+import { cardSchema, cardBalanceError } from '@/lib/card-schema'
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -40,8 +27,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: errorMsg }, { status: 400 })
   }
 
+  const balanceError = cardBalanceError(parsed.data)
+  if (balanceError) return NextResponse.json({ error: balanceError }, { status: 400 })
+
   const card = await prisma.creditCard.create({
-    data: { ...parsed.data, userId: session.user.id },
+    data: { ...parsed.data, billDueDate: parsed.data.billDueDate ? new Date(parsed.data.billDueDate) : null, userId: session.user.id },
   })
 
   return NextResponse.json(toJson(card), { status: 201 })

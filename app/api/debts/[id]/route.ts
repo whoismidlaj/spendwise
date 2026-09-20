@@ -5,15 +5,16 @@ import { prisma, toJson } from '@/lib/prisma'
 import { z } from 'zod'
 
 const debtUpdateSchema = z.object({
+  direction: z.enum(['BORROWED', 'LENT']).optional(),
   name: z.string().min(1).optional(),
   type: z.enum(['PERSONAL', 'LOAN', 'CREDIT_LINE', 'PAY_LATER']).optional(),
-  amount: z.number().positive().optional(),
-  remaining: z.number().nonnegative().optional(),
-  interestRate: z.number().nonnegative().optional(),
+  amount: z.number().finite().multipleOf(0.01).positive().optional(),
+  remaining: z.number().finite().multipleOf(0.01).nonnegative().optional(),
+  interestRate: z.number().finite().multipleOf(0.01).nonnegative().optional(),
   isRecurring: z.boolean().optional(),
-  paymentDate: z.number().min(1).max(31).nullable().optional(),
-  paymentAmount: z.number().positive().nullable().optional(),
-  deadline: z.string().nullable().optional(),
+  paymentDate: z.number().int().min(1).max(31).nullable().optional(),
+  paymentAmount: z.number().finite().multipleOf(0.01).positive().nullable().optional(),
+  deadline: z.string().date().nullable().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
   description: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
@@ -38,11 +39,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: errorMsg }, { status: 400 })
     }
 
+    if (parsed.data.direction && parsed.data.direction !== existing.direction) {
+      const payments = await prisma.debtPayment.count({ where: { debtId: id } })
+      if (payments > 0) return NextResponse.json({ error: 'Direction cannot change after recording repayments' }, { status: 400 })
+    }
     const updateData: any = { ...parsed.data }
     if (parsed.data.deadline !== undefined) {
       updateData.deadline = parsed.data.deadline ? new Date(parsed.data.deadline) : null
     }
 
+    if (parsed.data.remaining !== undefined) updateData.isActive = parsed.data.remaining > 0
     const updated = await prisma.debt.update({
       where: { id },
       data: updateData,

@@ -1,0 +1,5 @@
+ALTER TABLE "CreditCard" ADD COLUMN "expectedDue" DECIMAL(15,2),
+ADD COLUMN "billDueDate" TIMESTAMP(3);
+CREATE TYPE "DebtDirection" AS ENUM ('BORROWED', 'LENT');
+ALTER TABLE "Debt" ADD COLUMN "direction" "DebtDirection" NOT NULL DEFAULT 'BORROWED';
+ALTER TABLE "Transaction" ADD COLUMN "managedPayment" BOOLEAN NOT NULL DEFAULT false;

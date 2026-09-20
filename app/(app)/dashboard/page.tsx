@@ -6,7 +6,7 @@ import { TransactionForm } from '@/components/transactions/TransactionForm'
 import { TrendingUp, TrendingDown, CreditCard, Clock, Calendar, AlertCircle } from 'lucide-react'
 
 interface Account { id: string; name: string; balance: number; type: string; color: string }
-interface CCCard { id: string; name: string; bank: string; totalLimit: number; usedLimit: number; dueAmount: number; minimumDue: number; dueDate: number; statementDate: number; color: string; type: 'CARD' | 'PAYLATER' }
+interface CCCard { id: string; name: string; bank: string; totalLimit: number; usedLimit: number; dueAmount: number; minimumDue: number; expectedDue: number | null; billDueDate: string | null; dueDate: number; statementDate: number; color: string; type: 'CARD' | 'PAYLATER' }
 interface Debt {
   id: string
   name: string
@@ -132,7 +132,7 @@ export default function DashboardPage() {
           <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 px-1">Cards & Pay Later</h3>
           <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
             {cards.map(card => {
-              const daysLeft = daysUntilDueDate(card.dueDate)
+              const daysLeft = card.billDueDate ? Math.ceil((new Date(card.billDueDate.slice(0, 10) + 'T23:59:59').getTime() - Date.now()) / 86400000) : daysUntilDueDate(card.dueDate)
               return (
                 <Card key={card.id} className="min-w-[240px] p-4 flex-shrink-0">
                   <div className="flex justify-between items-start mb-3">
@@ -152,6 +152,7 @@ export default function DashboardPage() {
                       <span className="text-[10px] text-gray-400">Due</span>
                       <span className="text-xs font-semibold text-danger tabular-nums">{formatCurrency(card.dueAmount)}</span>
                     </div>
+                    <div className="flex flex-col"><span className="text-[10px] text-gray-400">Expected</span><span className="text-xs font-semibold">{formatCurrency(card.expectedDue ?? Math.max(0, card.usedLimit))}</span></div>
                     {card.minimumDue > 0 && (
                       <div className="flex flex-col items-end">
                         <span className="text-[10px] text-gray-400">Min Due</span>
@@ -160,7 +161,7 @@ export default function DashboardPage() {
                     )}
                   </div>
                   <div className="text-[10px] text-gray-400 mt-2 flex items-center gap-1 justify-center bg-surface-offset dark:bg-gray-800/50 py-1 rounded">
-                    <Clock size={10} />{daysLeft}d left (due {card.dueDate}th)
+                    <Clock size={10} />{daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`} (due {card.billDueDate ? new Date(card.billDueDate).toLocaleDateString('en-IN') : `${card.dueDate}th`})
                   </div>
                 </Card>
               )

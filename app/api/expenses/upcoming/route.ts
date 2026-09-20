@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
       orderBy: { emiDate: 'asc' },
     }),
     prisma.debt.findMany({
-      where: { userId: session.user.id, isActive: true },
+      where: { userId: session.user.id, isActive: true, direction: 'BORROWED' },
       include: {
         payments: {
           orderBy: { paidDate: 'desc' },
@@ -95,23 +95,25 @@ export async function GET(req: NextRequest) {
     const dueAmount = Number(card.dueAmount)
     const minimumDue = Number(card.minimumDue)
     if (dueAmount > 0 || minimumDue > 0) {
-      // If minimumDue > 0, use minimumDue as the primary bill amount, otherwise full dueAmount
-      const primaryAmount = minimumDue > 0 ? minimumDue : dueAmount
+      // Show the full actual bill with the minimum separately. Estimates are not bills.
+      const primaryAmount = dueAmount
 
-      for (const { year, month } of months) {
-        const day = getValidDay(year, month, card.dueDate)
+      // A variable bill is one dated obligation, not a recurring fixed monthly charge.
+      const billDate = card.billDueDate ?? new Date(now.getFullYear(), now.getMonth(), getValidDay(now.getFullYear(), now.getMonth(), card.dueDate))
+      for (const { year, month } of [{ year: card.billDueDate ? billDate.getUTCFullYear() : now.getFullYear(), month: card.billDueDate ? billDate.getUTCMonth() : now.getMonth() }]) {
+        const day = card.billDueDate ? billDate.getUTCDate() : getValidDay(year, month, card.dueDate)
         const dueDate = new Date(year, month, day, 23, 59, 59, 999)
 
         if (dueDate >= rangeStart && dueDate <= rangeEnd) {
           const diffTime = dueDate.getTime() - todayStart.getTime()
-          const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          const daysLeft = Math.round((new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()).getTime() - todayStart.getTime()) / 86400000)
 
           upcomingItems.push({
             id: `cc-${card.id}-${year}-${month}`,
             sourceId: card.id,
             name: `${card.bank} ${card.name}`,
             source: 'CREDIT_CARD',
-            typeLabel: card.type === 'PAYLATER' ? 'Pay Later' : (minimumDue > 0 ? 'Card Min Due' : 'Credit Card Bill'),
+            typeLabel: card.type === 'PAYLATER' ? 'Pay Later' : 'Credit Card Bill',
             amount: primaryAmount,
             minimumAmount: minimumDue > 0 ? minimumDue : undefined,
             remainingTotal: dueAmount,
@@ -152,7 +154,7 @@ export async function GET(req: NextRequest) {
 
         if (!alreadyPaidThisMonth) {
           const diffTime = dueDate.getTime() - todayStart.getTime()
-          const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          const daysLeft = Math.round((new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()).getTime() - todayStart.getTime()) / 86400000)
 
           const typeLabels: Record<string, string> = {
             EMI: 'Loan EMI',
@@ -206,7 +208,7 @@ export async function GET(req: NextRequest) {
 
           if (!alreadyPaidThisMonth) {
             const diffTime = dueDate.getTime() - todayStart.getTime()
-            const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+            const daysLeft = Math.round((new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()).getTime() - todayStart.getTime()) / 86400000)
 
             const debtTypeLabels: Record<string, string> = {
               PERSONAL: 'Personal Debt EMI',
@@ -234,8 +236,7 @@ export async function GET(req: NextRequest) {
     } else if (debt.deadline) {
       const deadlineDate = new Date(debt.deadline)
       if (deadlineDate >= rangeStart && deadlineDate <= rangeEnd) {
-        const diffTime = deadlineDate.getTime() - todayStart.getTime()
-        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        const daysLeft = Math.round((new Date(deadlineDate.getFullYear(), deadlineDate.getMonth(), deadlineDate.getDate()).getTime() - todayStart.getTime()) / 86400000)
 
         upcomingItems.push({
           id: `debt-deadline-${debt.id}`,

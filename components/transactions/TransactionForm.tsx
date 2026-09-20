@@ -133,6 +133,7 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
       combinedDateTime = new Date(data.date).toISOString()
     }
 
+    const payingByCard = data.type === 'EXPENSE' && useCard
     const payload = {
       type: data.type,
       amount: parseFloat(data.amount),
@@ -141,13 +142,13 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
       date: combinedDateTime,
       accountId: data.type === 'TRANSFER'
         ? (data.accountId || null)
-        : (useCard ? null : (data.accountId || null)),
+        : (payingByCard ? null : (data.accountId || null)),
       toAccountId: data.type === 'TRANSFER'
         ? (data.toAccountId || null)
         : null,
       creditCardId: data.type === 'TRANSFER'
         ? null
-        : (useCard ? (data.creditCardId || null) : null),
+        : (payingByCard ? (data.creditCardId || null) : null),
       categoryId: data.categoryId || null,
     }
 
@@ -274,13 +275,15 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
               }}
               className={cn(
                 'px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
-                !useCard ? 'bg-primary text-white shadow-xs' : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+                (!useCard || type !== 'EXPENSE') ? 'bg-primary text-white shadow-xs' : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
               )}
             >
               Bank / Cash Account
             </button>
             <button
+              id="transaction-card-source"
               type="button"
+              disabled={type !== 'EXPENSE'}
               onClick={() => {
                 setUseCard(true)
                 if (!watch('creditCardId') && cards.length > 0) {
@@ -289,13 +292,13 @@ export function TransactionForm({ onSuccess, initial }: TransactionFormProps) {
               }}
               className={cn(
                 'px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all',
-                useCard ? 'bg-primary text-white shadow-xs' : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+                (useCard && type === 'EXPENSE') ? 'bg-primary text-white shadow-xs' : 'bg-surface-offset dark:bg-gray-800 text-gray-600 dark:text-gray-300'
               )}
             >
               Credit Card / Pay Later
             </button>
           </div>
-          {!useCard ? (
+          {!useCard || type !== 'EXPENSE' ? (
             <Select {...register('accountId')}>
               <option value="">Select account</option>
               {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}

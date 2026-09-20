@@ -1,113 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma, toJson } from '@/lib/prisma'
+import { toJson } from '@/lib/prisma'
+import { atomic, PaymentError } from '@/lib/payments'
 import { z } from 'zod'
 
 const paymentSchema = z.object({
-  amount: z.number().positive(),
+  amount: z.number().finite().positive().multipleOf(0.01),
   accountId: z.string().optional(),
+  paidDate: z.string().date().optional(),
 })
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const { id } = await params
-
   try {
-    const body = await req.json()
-    const parsed = paymentSchema.safeParse(body)
-    if (!parsed.success) {
-      const errorMsg = parsed.error.issues?.[0]?.message || 'Invalid payment data'
-      return NextResponse.json({ error: errorMsg }, { status: 400 })
-    }
-
+    const parsed = paymentSchema.safeParse(await req.json())
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     const { amount, accountId } = parsed.data
-
-    const debt = await prisma.debt.findFirst({
-      where: { id, userId: session.user.id },
-    })
-    if (!debt) return NextResponse.json({ error: 'Debt not found' }, { status: 404 })
-
-    const newRemaining = Math.max(0, Number(debt.remaining) - amount)
-
-    const result = await prisma.$transaction(async (tx: any) => {
-      // 1. Update remaining balance of the debt
-      const updatedDebt = await tx.debt.update({
+    const paidDate = parsed.data.paidDate ? new Date(parsed.data.paidDate) : new Date()
+    const result = await atomic(async tx => {
+      const record = await tx.debt.findFirst({ where: { id, userId: session.user.id, isActive: true } })
+      if (!record) throw new PaymentError('Record not found', 404)
+      if (accountId && !await tx.account.findFirst({ where: { id: accountId, userId: session.user.id, isActive: true } })) {
+        throw new PaymentError('Account not found', 404)
+      }
+      if (amount > Number(record.remaining)) throw new PaymentError('Repayment exceeds the remaining balance')
+      const updated = await tx.debt.update({
         where: { id },
-        data: {
-          remaining: newRemaining,
-          isActive: newRemaining > 0,
-        },
+        data: { remaining: { decrement: amount }, isActive: Number(record.remaining) > amount },
       })
-
-      // 2. Create the DebtPayment record
       const payment = await tx.debtPayment.create({
-        data: {
-          debtId: id,
-          amount,
-          accountId: accountId || null,
-        },
+        data: { debtId: id, amount, accountId: accountId || null, paidDate },
       })
+      const received = record.direction === 'LENT'
 
-      // 3. If accountId is provided, deduct from account balance and record expense
+      // Principal repayments move money without counting spending twice or inflating income.
       if (accountId) {
-        const account = await tx.account.findFirst({
-          where: { id: accountId, userId: session.user.id },
-        })
-        if (!account) throw new Error('Account not found')
-
-        // Find or create a "Debt" category
-        let category = await tx.category.findFirst({
-          where: { userId: session.user.id, name: 'Debt Payment', type: 'EXPENSE' },
-        })
-        if (!category) {
-          // Fallback to "Other"
-          category = await tx.category.findFirst({
-            where: { userId: session.user.id, name: 'Other', type: 'EXPENSE' },
-          })
-        }
-        if (!category) {
-          // Create "Debt Payment" category
-          category = await tx.category.create({
-            data: {
-              userId: session.user.id,
-              name: 'Debt Payment',
-              icon: '💸',
-              color: '#ef4444',
-              type: 'EXPENSE',
-            },
-          })
-        }
-
-        // Create transaction
         await tx.transaction.create({
           data: {
             userId: session.user.id,
-            accountId,
-            categoryId: category.id,
-            type: 'EXPENSE',
+            accountId: received ? null : accountId,
+            toAccountId: received ? accountId : null,
+            type: 'TRANSFER',
+            managedPayment: true,
             amount,
-            name: `Payment: ${debt.name}`,
-            date: new Date(),
+            name: `${received ? 'Repayment received' : 'Payment'}: ${record.name}`,
+            date: paidDate,
           },
         })
-
-        // Decrement account balance
         await tx.account.update({
           where: { id: accountId },
-          data: {
-            balance: { decrement: amount },
-          },
+          data: { balance: { increment: received ? amount : -amount } },
         })
       }
-
-      return { updatedDebt, payment }
+      return { updatedDebt: updated, payment }
     })
-
     return NextResponse.json(toJson(result))
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof PaymentError ? error.message : 'Unable to record payment' }, { status: error instanceof PaymentError ? error.status : 500 })
   }
 }

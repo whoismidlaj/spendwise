@@ -57,6 +57,7 @@ export const RECURRING_TYPE_LABELS: Record<string, string> = {
 export function generateDebtsCSV(debts: any[]): string {
   const headers = [
     'Debt Name',
+    'Direction',
     'Type',
     'Priority',
     'Total Amount',
@@ -83,6 +84,7 @@ export function generateDebtsCSV(debts: any[]): string {
 
     return [
       escapeCSV(d.name),
+      escapeCSV(d.direction === 'LENT' ? 'Owed to me' : 'I owe'),
       escapeCSV(DEBT_TYPE_LABELS[d.type] || d.type),
       escapeCSV(d.priority || 'MEDIUM'),
       escapeCSV(totalAmount.toFixed(2)),
@@ -110,7 +112,9 @@ export function generateDebtsCSV(debts: any[]): string {
     `"Spendwise Debts & Liabilities Report - Exported on ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}"`,
     `"Total Debts Count","${debts.length}"`,
     `"Total Original Principal","${totalPrincipal.toFixed(2)}"`,
-    `"Total Outstanding Balance","${totalOutstanding.toFixed(2)}"`,
+    `"Total Tracked Balance (Borrowed + Lent)","${totalOutstanding.toFixed(2)}"`,
+    `"I Owe","${debts.filter(d => d.direction !== 'LENT').reduce((sum, d) => sum + Number(d.remaining || 0), 0).toFixed(2)}"`,
+    `"Owed to Me","${debts.filter(d => d.direction === 'LENT').reduce((sum, d) => sum + Number(d.remaining || 0), 0).toFixed(2)}"`,
     `"Total Amount Paid Off","${totalPaid.toFixed(2)}"`,
     '',
     headers.map(h => escapeCSV(h)).join(','),
@@ -241,7 +245,7 @@ export function generateAllLiabilitiesCSV(data: {
 }): string {
   const { debts, recurring, creditCards } = data
 
-  const personalDebtsTotal = debts.reduce((sum, d) => sum + Number(d.remaining || 0), 0)
+  const personalDebtsTotal = debts.filter(d => d.direction !== 'LENT').reduce((sum, d) => sum + Number(d.remaining || 0), 0)
   const creditCardsTotal = creditCards.reduce((sum, c) => {
     const used = Number(c.usedLimit || 0)
     const due = Number(c.dueAmount || 0)
@@ -256,7 +260,7 @@ export function generateAllLiabilitiesCSV(data: {
 
   const totalLiabilities = personalDebtsTotal + creditCardsTotal + loansRemainingTotal
   const totalMonthlyCommitment = recurring.reduce((sum, r) => sum + Number(r.emiAmount || 0), 0) +
-    debts.filter(d => d.isRecurring && d.paymentAmount).reduce((sum, d) => sum + Number(d.paymentAmount || 0), 0)
+    debts.filter(d => d.direction !== 'LENT' && d.isActive !== false && d.isRecurring && d.paymentAmount).reduce((sum, d) => sum + Number(d.paymentAmount || 0), 0)
 
   const lines: string[] = [
     `"================================================================================"`,
@@ -286,7 +290,7 @@ export function generateAllLiabilitiesCSV(data: {
     `"SECTION 3: CREDIT CARDS & PAY LATER ACCOUNTS"`,
     `"================================================================================"`,
     [
-      ['Card / Account Name', 'Bank', 'Type', 'Total Limit', 'Used Limit', 'Due Amount', 'Min Due', 'Due Date Day', 'Statement Date Day'].map(escapeCSV).join(','),
+      ['Card / Account Name', 'Bank', 'Type', 'Total Limit', 'Used Limit', 'Due Amount', 'Min Due', 'Expected Due', 'Estimate Source', 'Current Bill Due Date', 'Due Date Day', 'Statement Date Day'].map(escapeCSV).join(','),
       ...creditCards.map(c => [
         escapeCSV(c.name),
         escapeCSV(c.bank),
@@ -295,6 +299,9 @@ export function generateAllLiabilitiesCSV(data: {
         escapeCSV(Number(c.usedLimit || 0).toFixed(2)),
         escapeCSV(Number(c.dueAmount || 0).toFixed(2)),
         escapeCSV(Number(c.minimumDue || 0).toFixed(2)),
+        escapeCSV(Number(c.expectedDue ?? Math.max(0, Number(c.usedLimit))).toFixed(2)),
+        escapeCSV(c.expectedDue == null ? 'Usage' : 'Manual'),
+        escapeCSV(c.billDueDate ? c.billDueDate.slice(0, 10) : ''),
         escapeCSV(`Day ${c.dueDate}`),
         escapeCSV(`Day ${c.statementDate}`),
       ].join(',')),

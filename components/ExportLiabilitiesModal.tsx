@@ -59,7 +59,7 @@ export function ExportLiabilitiesModal({
     }
   }, [open, initialScope])
 
-  const debtsTotal = debts.reduce((sum, d) => sum + Number(d.remaining || 0), 0)
+  const debtsTotal = debts.filter(d => d.direction !== 'LENT').reduce((sum, d) => sum + Number(d.remaining || 0), 0)
   const emiMonthlyTotal = recurring.reduce((sum, r) => sum + Number(r.emiAmount || 0), 0)
   const cardsTotal = creditCards.reduce((sum, c) => {
     const used = Number(c.usedLimit || 0)
