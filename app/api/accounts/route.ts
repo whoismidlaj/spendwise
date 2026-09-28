@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getRequestUserId } from '@/lib/request-auth'
 import { prisma, toJson } from '@/lib/prisma'
 import { z } from 'zod'
 import { inferInstitution, INSTITUTION_IDS } from '@/lib/institutions'
@@ -13,12 +12,12 @@ export const accountSchema = z.object({
   institution: z.enum(INSTITUTION_IDS).default('OTHER'),
 })
 
-export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export async function GET(req: NextRequest) {
+  const userId = await getRequestUserId(req)
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const storedAccounts = await prisma.account.findMany({
-    where: { userId: session.user.id, isActive: true },
+    where: { userId, isActive: true },
     orderBy: { createdAt: 'asc' },
   })
   const accounts = await Promise.all(storedAccounts.map(async account => {
@@ -32,8 +31,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = await getRequestUserId(req)
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
   const parsed = accountSchema.safeParse(body)
@@ -43,7 +42,7 @@ export async function POST(req: NextRequest) {
   }
 
   const account = await prisma.account.create({
-    data: { ...parsed.data, userId: session.user.id },
+    data: { ...parsed.data, userId },
   })
 
   return NextResponse.json(toJson(account), { status: 201 })

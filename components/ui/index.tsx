@@ -296,6 +296,7 @@ export function ProgressBar({
 
 // DatePicker
 interface DatePickerProps {
+  id?: string
   label?: string
   value?: string
   onChange?: (e: any) => void
@@ -338,7 +339,7 @@ function pickerChange(onChange: DatePickerProps['onChange'], name: string | unde
 }
 
 export const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(function DatePicker(
-  { label, value, onChange, onBlur, name, error, required, className, ...props }, ref
+  { id, label, value, onChange, onBlur, name, error, required, className, ...props }, ref
 ) {
   const [isOpen, setIsOpen] = React.useState(false)
   const inputRef = React.useRef<HTMLInputElement | null>(null)
@@ -423,6 +424,7 @@ export const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(function
       />
 
       <button
+        id={id}
         type="button"
         onClick={openPicker}
         aria-haspopup="dialog"

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowDownLeft, ArrowRightLeft, CreditCard, MoreVertical, Pencil, ReceiptText, Trash2 } from 'lucide-react'
+import { ArrowDownLeft, ArrowRightLeft, CreditCard, MoreVertical, Pencil, ReceiptText, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { Badge, Button, Card, FAB, Sheet } from '@/components/ui'
 import { EditableQuickTransaction, QuickTransactionForm } from '@/components/QuickTransactionForm'
 import { formatCurrency } from '@/lib/currency'
@@ -12,6 +12,7 @@ type Transaction = {
   type: 'INCOME' | 'EXPENSE' | 'TRANSFER'
   amount: number
   name: string
+  description?: string | null
   date: string
   managedPayment: boolean
   account?: { id: string; name: string }
@@ -108,10 +109,18 @@ export default function TransactionHistoryPage() {
       <h2 className="px-1 text-xs font-semibold text-gray-500">{dateLabel(items[0].date)}</h2>
       <Card className="divide-y divide-border overflow-hidden dark:divide-gray-800">
         {items.map(item => {
-          const Icon = item.type === 'TRANSFER' ? ArrowRightLeft : item.type === 'INCOME' ? ArrowDownLeft : item.creditCard ? CreditCard : ReceiptText
+          const isAdjustment = item.name.toLowerCase().includes('balance adjustment') || item.name.toLowerCase().includes('usage adjustment')
+          const Icon = isAdjustment ? SlidersHorizontal : item.type === 'TRANSFER' ? ArrowRightLeft : item.type === 'INCOME' ? ArrowDownLeft : item.creditCard ? CreditCard : ReceiptText
           return <div key={item.id} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-3">
             <div className={cn('flex h-9 w-9 items-center justify-center rounded-full', item.type === 'INCOME' ? 'bg-success/10 text-success' : item.type === 'EXPENSE' ? 'bg-danger/10 text-danger' : 'bg-primary/10 text-primary')}><Icon size={16} /></div>
-            <div className="min-w-0"><div className="flex min-w-0 items-center gap-1.5"><p className="truncate text-sm font-semibold">{item.name}</p>{item.managedPayment && <Badge className="shrink-0 bg-surface-offset px-1.5 text-[9px] text-gray-500 dark:bg-gray-800">Auto</Badge>}</div><p className="truncate text-[11px] text-gray-500">{sourceLabel(item)}</p></div>
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <p className="truncate text-sm font-semibold">{item.name}</p>
+                {item.managedPayment && <Badge className="shrink-0 bg-surface-offset px-1.5 text-[9px] text-gray-500 dark:bg-gray-800">Auto</Badge>}
+                {isAdjustment && <Badge className="shrink-0 bg-primary/10 text-primary px-1.5 text-[9px] dark:bg-primary/20">Adjustment</Badge>}
+              </div>
+              <p className="truncate text-[11px] text-gray-500">{sourceLabel(item)}</p>
+            </div>
             <div className="shrink-0 whitespace-nowrap text-right"><p className={cn('text-sm font-bold tabular-nums', item.type === 'INCOME' ? 'text-success' : item.type === 'EXPENSE' ? 'text-danger' : '')}>{item.type === 'INCOME' ? '+' : item.type === 'EXPENSE' ? '−' : ''}{formatCurrency(item.amount)}</p><div className="flex items-center justify-end gap-0.5"><p className="text-[9px] text-gray-400">{new Date(item.date).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</p>{!item.managedPayment && <button type="button" onClick={() => { setActionTransaction(item); setConfirmingDelete(false); setActionError('') }} className="-mr-2 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-surface-offset hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200" aria-label={`Edit or delete ${item.name}`}><MoreVertical size={17} /></button>}</div></div>
           </div>
         })}
@@ -130,7 +139,11 @@ export default function TransactionHistoryPage() {
         {actionError && <p role="alert" className="text-sm text-danger">{actionError}</p>}
         <div className="grid grid-cols-2 gap-3"><Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)}>Cancel</Button><Button type="button" variant="danger" loading={deleting} onClick={deleteTransaction}>Delete</Button></div>
       </div> : <div className="space-y-3 pb-4">
-        <div className="rounded-xl bg-surface-offset p-3 dark:bg-gray-800"><p className="truncate text-sm font-semibold">{actionTransaction.name}</p><p className="mt-0.5 text-xs text-gray-500">{formatCurrency(actionTransaction.amount)} · {sourceLabel(actionTransaction)}</p></div>
+        <div className="rounded-xl bg-surface-offset p-3 dark:bg-gray-800">
+          <p className="truncate text-sm font-semibold">{actionTransaction.name}</p>
+          {actionTransaction.description && <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{actionTransaction.description}</p>}
+          <p className="mt-0.5 text-xs text-gray-500">{formatCurrency(actionTransaction.amount)} · {sourceLabel(actionTransaction)}</p>
+        </div>
         <Button type="button" variant="outline" size="lg" className="gap-2" onClick={() => { setEditingTransaction(actionTransaction); closeActions() }}><Pencil size={17} /> Edit transaction</Button>
         <Button type="button" variant="danger" size="lg" className="gap-2" onClick={() => setConfirmingDelete(true)}><Trash2 size={17} /> Delete transaction</Button>
       </div>)}

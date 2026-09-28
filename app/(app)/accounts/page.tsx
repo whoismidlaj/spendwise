@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/currency'
 import { Card, Button, Sheet, Input, Select, Badge, DatePicker, ProgressBar } from '@/components/ui'
-import { ChevronDown, ChevronRight, Edit2, HandCoins, Plus, ReceiptText, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Edit2, HandCoins, Plus, ReceiptText, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { CardPaymentForm } from '@/components/CardPaymentForm'
+import { ReconcileForm, ReconcileTarget } from '@/components/ReconcileForm'
 import { InstitutionLogo } from '@/components/InstitutionLogo'
 import { INSTITUTIONS, InstitutionId, inferInstitution } from '@/lib/institutions'
 import { cn } from '@/lib/utils'
@@ -143,6 +144,7 @@ export default function AccountsPage() {
   const [debts, setDebts] = useState<DebtSummary[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [sheet, setSheet] = useState<{ type: 'account' | 'card'; edit?: Account | CreditCard } | null>(null)
+  const [reconcileTarget, setReconcileTarget] = useState<ReconcileTarget | null>(null)
   const [mounted, setMounted] = useState(false)
 
   async function load() {
@@ -204,11 +206,14 @@ export default function AccountsPage() {
                 <ChevronDown size={15} className={cn('text-gray-400 transition-transform', expanded === acc.id && 'rotate-180')} />
               </button>
               {expanded === acc.id && (
-                <div className="flex gap-2 px-4 pb-4">
-                  <Button variant="outline" size="sm" onClick={() => setSheet({ type: 'account', edit: acc })} className="gap-1">
+                <div className="flex flex-wrap gap-2 px-4 pb-4">
+                  <Button id={`reconcile-account-${acc.id}`} variant="outline" size="sm" onClick={() => setReconcileTarget({ id: acc.id, name: acc.name, type: 'account', currentValue: Number(acc.balance) })} className="gap-1">
+                    <SlidersHorizontal size={13} />Adjust Balance
+                  </Button>
+                  <Button id={`edit-account-${acc.id}`} variant="outline" size="sm" onClick={() => setSheet({ type: 'account', edit: acc })} className="gap-1">
                     <Edit2 size={13} />Edit
                   </Button>
-                  <Button variant="danger" size="sm" onClick={() => deleteAccount(acc.id)} className="gap-1">
+                  <Button id={`delete-account-${acc.id}`} variant="danger" size="sm" onClick={() => deleteAccount(acc.id)} className="gap-1">
                     <Trash2 size={13} />Delete
                   </Button>
                 </div>
@@ -257,7 +262,12 @@ export default function AccountsPage() {
                       </button>
                     </div>
                   </div>
-                  <Button id={`pay-card-${card.id}`} variant="outline" size="sm" disabled={card.usedLimit <= 0} onClick={() => setPayCard(card)} className="mb-3">Record Payment</Button>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <Button id={`pay-card-${card.id}`} variant="outline" size="sm" disabled={card.usedLimit <= 0} onClick={() => setPayCard(card)}>Record Payment</Button>
+                    <Button id={`reconcile-card-${card.id}`} variant="outline" size="sm" onClick={() => setReconcileTarget({ id: card.id, name: card.name, type: 'card', currentValue: Number(card.usedLimit) })} className="gap-1">
+                      <SlidersHorizontal size={13} />Adjust Usage
+                    </Button>
+                  </div>
                   <ProgressBar value={card.usedLimit} max={card.totalLimit} className="mb-3" />
                   <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
                     <div>
@@ -297,6 +307,16 @@ export default function AccountsPage() {
 
       <Sheet open={!!payCard} onClose={() => setPayCard(null)} title={`Pay ${payCard?.name ?? 'card'}`}>
         {payCard && <CardPaymentForm card={payCard} accounts={accounts} onSuccess={() => { setPayCard(null); load() }} />}
+      </Sheet>
+      <Sheet open={!!reconcileTarget} onClose={() => setReconcileTarget(null)}
+        title={reconcileTarget?.type === 'account' ? `Adjust ${reconcileTarget.name} Balance` : `Adjust ${reconcileTarget?.name} Usage`}>
+        {reconcileTarget && (
+          <ReconcileForm
+            target={reconcileTarget}
+            onSuccess={() => { setReconcileTarget(null); load() }}
+            onCancel={() => setReconcileTarget(null)}
+          />
+        )}
       </Sheet>
       <Sheet open={!!sheet} onClose={() => setSheet(null)}
         title={sheet?.type === 'account' ? (sheet.edit ? 'Edit Account' : 'Add Account') : (sheet?.edit ? 'Edit Card' : 'Add Credit Card')}>

@@ -66,6 +66,18 @@ async function reverseEffect(tx: Prisma.TransactionClient, entry: TransactionRec
     if (entry.accountId) {
       await tx.account.update({ where: { id: entry.accountId }, data: { balance: { decrement: amount } } })
     }
+    if (entry.creditCardId) {
+      const card = await tx.creditCard.findUnique({ where: { id: entry.creditCardId } })
+      if (card) {
+        await tx.creditCard.update({
+          where: { id: card.id },
+          data: {
+            usedLimit: { increment: amount },
+            ...(card.expectedDue !== null && { expectedDue: { increment: amount } }),
+          },
+        })
+      }
+    }
     return
   }
 
