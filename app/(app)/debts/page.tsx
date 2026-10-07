@@ -55,8 +55,10 @@ const typeLabels: Record<Debt['type'], string> = {
   PERSONAL: 'Personal debt', LOAN: 'Loan / EMI', CREDIT_LINE: 'Credit line', PAY_LATER: 'Personal pay later',
 }
 
-function LoanSchedule({ debt, onClose }: { debt: Debt; onClose: () => void }) {
-  const schedule = buildLoanSchedule(debt.amount, debt.interestRate || 0, debt.paymentAmount!, debt.totalInstallments!, debt.startDate!, debt.paymentDate)
+function LoanSchedule({ debt, onClose, onMarkPaid, onMarkUnpaid }: { debt: Debt; onClose: () => void; onMarkPaid: (amount: number, date: Date) => void; onMarkUnpaid: (paymentId: string) => void }) {
+  // Existing loans may not have a total-installment count. A generous upper
+  // bound lets the schedule helper continue until the balance is fully paid.
+  const schedule = buildLoanSchedule(debt.amount, debt.interestRate || 0, debt.paymentAmount!, debt.totalInstallments || 600, debt.startDate!, debt.paymentDate)
   const payments = [...debt.payments].sort((a, b) => new Date(a.paidDate).getTime() - new Date(b.paidDate).getTime())
   const paidTotal = payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
   return <Sheet open onClose={onClose} title={`${debt.name} installments`}>
@@ -68,12 +70,12 @@ function LoanSchedule({ debt, onClose }: { debt: Debt; onClose: () => void }) {
       </Card>
       <p className="text-xs text-gray-500">Estimated principal and interest split. Recorded payments show your actual progress.</p>
       <Card className="divide-y divide-border overflow-hidden dark:divide-gray-800">
-        {schedule.map((item, index) => {
-          const payment = payments[index]
+        {schedule.map(item => {
+          const payment = payments.find(entry => { const paidDate = new Date(entry.paidDate); return paidDate.getFullYear() === item.dueDate.getFullYear() && paidDate.getMonth() === item.dueDate.getMonth() })
           return <div key={item.number} className="grid grid-cols-[24px_minmax(0,1fr)_auto] gap-2 p-3 text-xs">
             <span className="font-bold text-primary">{item.number}</span>
             <div className="min-w-0"><p className="font-semibold">{item.dueDate.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</p><p className="truncate text-[10px] text-gray-500">Principal {formatCurrency(item.principal)} · Interest {formatCurrency(item.interest)}</p></div>
-            <div className="shrink-0 whitespace-nowrap text-right"><p className="font-bold">{formatCurrency(item.emi)}</p><p className={payment ? 'text-[10px] text-success' : 'text-[10px] text-gray-400'}>{payment ? `Paid ${formatCurrency(payment.amount)}` : `Bal. ${formatCurrency(item.closing)}`}</p></div>
+            <div className="shrink-0 text-right"><p className="font-bold">{formatCurrency(item.emi)}</p>{payment ? <><p className="text-[10px] text-success">Paid {formatCurrency(payment.amount)}</p><Button size="sm" variant="outline" className="mt-1 min-h-8 px-2 text-[10px] text-danger" onClick={() => onMarkUnpaid(payment.id)}>Mark unpaid</Button></> : <><p className="text-[10px] text-gray-400">Not paid</p><Button size="sm" variant="outline" className="mt-1 min-h-8 px-2 text-[10px]" onClick={() => onMarkPaid(item.emi, item.dueDate)}>Mark paid</Button></>}</div>
           </div>
         })}
       </Card>
@@ -177,8 +179,18 @@ export default function DebtsPage() {
     try {
       const response = await fetch(`/api/debts/${paying.id}/pay`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: Number(amount), paidDate, accountId: accountId || undefined }) })
       if (!response.ok) throw new Error((await response.json()).error || 'Unable to record payment')
-      setPaying(null); setAmount(''); setAccountId(''); await load()
+      setPaying(null); setSchedule(null); setAmount(''); setAccountId(''); await load()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to record payment') } finally { setLoading(false) }
+  }
+
+  async function markUnpaid(paymentId: string) {
+    if (!schedule || !window.confirm('Mark this installment as unpaid? The payment will be removed and the balance restored.')) return
+    setLoading(true); setError('')
+    try {
+      const response = await fetch(`/api/debts/${schedule.id}/pay`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paymentId }) })
+      if (!response.ok) throw new Error((await response.json()).error || 'Unable to mark installment unpaid')
+      setSchedule(null); await load()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to mark installment unpaid') } finally { setLoading(false) }
   }
 
   return <div className="mx-auto max-w-3xl space-y-3 px-3 py-3 sm:space-y-4 sm:px-4 sm:py-4">
@@ -186,26 +198,26 @@ export default function DebtsPage() {
       <p className="text-sm text-white/75">Total I owe</p><p className="mt-1 whitespace-nowrap text-3xl font-bold tabular-nums">{formatCurrency(iOwe)}</p>
       <p className="mt-2 text-xs text-white/70">{visible.length} active loan{visible.length === 1 ? '' : 's'} · {formatCurrency(monthly)} in monthly repayments</p>
     </Card>
-    <Button onClick={() => { setError(''); setForm(emptyForm()); setAddOpen(true) }} className="w-full gap-2"><Plus size={16} /> Add loan, debt, or lending</Button>
+    <Button onClick={() => { setError(''); setForm(emptyForm()); setAddOpen(true) }} className="w-full gap-2"><Plus size={16} /> Add loan or debt</Button>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     {loading && debts.length === 0 ? <p className="py-8 text-center text-sm text-gray-500">Loading loans…</p> : visible.length === 0 ? <Card className="p-8 text-center text-gray-500"><Landmark className="mx-auto mb-2" /><p>No records here yet.</p></Card> : <div className="space-y-3">
       {visible.map(debt => {
         const progress = debt.amount > 0 ? Math.min(100, Math.max(0, ((debt.amount - debt.remaining) / debt.amount) * 100)) : 0
         const payments = [...debt.payments].sort((a, b) => new Date(b.paidDate).getTime() - new Date(a.paidDate).getTime())
-        const canShowSchedule = debt.type === 'LOAN' && debt.isRecurring && debt.paymentAmount && debt.totalInstallments && debt.startDate
+        const canShowSchedule = debt.type === 'LOAN' && debt.isRecurring && debt.paymentAmount && debt.startDate
         return <Card key={debt.id} className="p-3.5 sm:p-4">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5"><div className="min-w-0"><div className="flex min-w-0 items-center gap-1.5"><p className="truncate font-semibold">{debt.name}</p><Badge className="shrink-0 bg-primary/10 text-[10px] text-primary">{typeLabels[debt.type]}</Badge></div><p className="mt-1 truncate text-[11px] text-gray-500 sm:text-xs">{debt.isRecurring && debt.paymentAmount ? `${formatCurrency(debt.paymentAmount)} monthly${debt.paymentDate ? ` · day ${debt.paymentDate}` : ''}` : debt.deadline ? `Target ${new Date(debt.deadline).toLocaleDateString('en-IN')}` : 'No repayment date set'}</p></div><div className="shrink-0 whitespace-nowrap text-right"><p className="text-sm font-bold min-[390px]:text-base">{formatCurrency(debt.remaining)}</p><p className="text-[10px] text-gray-500">remaining</p></div></div>
           <div className="mt-3"><ProgressBar value={progress} max={100} /><div className="mt-1 flex justify-between text-[10px] text-gray-500"><span>{Math.round(progress)}% complete</span><span>{payments.length} payments recorded</span></div></div>
           {debt.description && <p className="mt-2 text-xs text-gray-500">{debt.description}</p>}
-          {canShowSchedule && <Button size="sm" variant="outline" onClick={() => setSchedule(debt)} className="mt-3 gap-1"><CalendarDays size={13} /> Installment breakdown</Button>}
+          {canShowSchedule && <Button size="sm" variant="outline" onClick={() => setSchedule(debt)} className="mt-3 gap-1"><CalendarDays size={13} /> View full repayment breakdown</Button>}
           {payments.length > 0 && <details className="mt-3 rounded-xl bg-surface-offset px-3 py-2 text-xs dark:bg-gray-800"><summary className="cursor-pointer font-semibold">Payment history</summary><div className="mt-2 divide-y divide-border dark:divide-gray-700">{payments.map(payment => <div key={payment.id} className="flex justify-between py-2"><span>{new Date(payment.paidDate).toLocaleDateString('en-IN')}</span><span className="font-semibold">{formatCurrency(payment.amount)}</span></div>)}</div></details>}
           <div className="mt-3 flex justify-end gap-2 border-t border-border pt-3 dark:border-gray-800"><Button size="sm" variant="outline" onClick={() => edit(debt)}><Pencil size={13} /></Button><Button size="sm" variant="outline" onClick={() => remove(debt)} className="text-danger"><Trash2 size={13} /></Button><Button size="sm" onClick={() => { setError(''); setPaying(debt); setAmount(String(Math.min(Number(debt.paymentAmount || debt.remaining), Number(debt.remaining)))); setPaidDate(new Date().toISOString().slice(0, 10)); setAccountId('') }} className="gap-1"><CheckCircle2 size={13} /> Pay</Button></div>
         </Card>
       })}
     </div>}
 
-    <Sheet open={addOpen || Boolean(editing)} onClose={() => { setAddOpen(false); setEditing(null) }} title={editing ? 'Edit loan or debt' : 'Add loan, debt, or lending'}><form onSubmit={save} className="space-y-4 pb-5"><DebtFields form={form} setForm={setForm} editing={Boolean(editing)} />{error && <p role="alert" className="text-sm text-danger">{error}</p>}<Button type="submit" loading={loading}>{editing ? 'Save changes' : 'Add record'}</Button></form></Sheet>
+    <Sheet open={addOpen || Boolean(editing)} onClose={() => { setAddOpen(false); setEditing(null) }} title={editing ? 'Edit loan or debt' : 'Add loan or debt'}><form onSubmit={save} className="space-y-4 pb-5"><DebtFields form={form} setForm={setForm} editing={Boolean(editing)} />{error && <p role="alert" className="text-sm text-danger">{error}</p>}<Button type="submit" loading={loading}>{editing ? 'Save changes' : 'Add record'}</Button></form></Sheet>
     <Sheet open={Boolean(paying)} onClose={() => setPaying(null)} title="Record payment">{paying && <form onSubmit={recordPayment} className="space-y-4 pb-5"><p className="rounded-xl bg-surface-offset p-3 text-sm dark:bg-gray-800">{paying.name} · {formatCurrency(paying.remaining)} remaining</p><Input label="Amount paid" type="number" min="0.01" max={paying.remaining} step="0.01" value={amount} onChange={event => setAmount(event.target.value)} required /><DatePicker label="Payment date" value={paidDate} onChange={event => setPaidDate(event.target.value)} /><Select label="Pay from account" value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">No account balance change</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</Select>{error && <p role="alert" className="text-sm text-danger">{error}</p>}<Button type="submit" loading={loading}>Record payment</Button></form>}</Sheet>
-    {schedule && <LoanSchedule debt={schedule} onClose={() => setSchedule(null)} />}
+    {schedule && <LoanSchedule debt={schedule} onClose={() => setSchedule(null)} onMarkPaid={(installmentAmount, dueDate) => { setSchedule(null); setPaying(schedule); setAmount(String(installmentAmount)); setPaidDate(dueDate.toISOString().slice(0, 10)); setAccountId('') }} onMarkUnpaid={markUnpaid} />}
   </div>
 }

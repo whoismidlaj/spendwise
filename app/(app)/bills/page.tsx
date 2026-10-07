@@ -1,83 +1,86 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { CalendarClock, CheckCircle2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { CalendarClock, CheckCircle2, ChevronDown, Plus } from 'lucide-react'
 import { Badge, Button, Card, Input, Select, Sheet } from '@/components/ui'
 import { formatCurrency } from '@/lib/currency'
 
 type Account = { id: string; name: string }
-type Bill = { id: string; name: string; type: string; amount: number; dueDay: number; isEssential: boolean; account?: Account; notes?: string }
-type BillForm = { name: string; type: string; amount: string; dueDay: string; isEssential: boolean; accountId: string; notes: string }
+type Obligation = { id: string; name: string; date: string; kind: 'INCOME' | 'PAYMENT'; amount: number; reservedAmount: number; source: string; status: string; isEssential: boolean }
+type Plan = { items: Obligation[] }
 
-const emptyForm = (): BillForm => ({ name: '', type: 'UTILITY', amount: '', dueDay: '', isEssential: true, accountId: '', notes: '' })
 const labels: Record<string, string> = { RENT: 'Rent', UTILITY: 'Utility', SUBSCRIPTION: 'Subscription', INSURANCE: 'Insurance', FAMILY: 'Family support', SAVINGS: 'Savings', OTHER: 'Other' }
 
-export default function BillsPage() {
-  const [bills, setBills] = useState<Bill[]>([])
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [form, setForm] = useState<BillForm>(emptyForm)
-  const [editing, setEditing] = useState<Bill | null>(null)
-  const [formOpen, setFormOpen] = useState(false)
-  const [paying, setPaying] = useState<Bill | null>(null)
-  const [paidAmount, setPaidAmount] = useState('')
-  const [paymentAccountId, setPaymentAccountId] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const set = (key: keyof BillForm) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(current => ({ ...current, [key]: event.target.type === 'checkbox' ? (event.target as HTMLInputElement).checked : event.target.value }))
+function dayLabel(date: string) {
+  return new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
 
-  const load = async () => {
-    const [billResponse, accountResponse] = await Promise.all([fetch('/api/payment-plans'), fetch('/api/accounts')])
-    setBills(await billResponse.json()); setAccounts(await accountResponse.json())
+function paymentTarget(item: Obligation) {
+  if (item.id.startsWith('plan-')) return { type: 'plan' as const, id: item.id.slice(5, -11) }
+  if (item.id.startsWith('debt-deadline-')) return { type: 'debt' as const, id: item.id.slice('debt-deadline-'.length) }
+  if (item.id.startsWith('debt-')) return { type: 'debt' as const, id: item.id.slice(5, -11) }
+  if (item.id.startsWith('card-')) return { type: 'card' as const, id: item.id.slice(5) }
+  return null
+}
+
+export default function BillsPage() {
+  const [items, setItems] = useState<Obligation[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [paying, setPaying] = useState<Obligation | null>(null)
+  const [accountId, setAccountId] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
+  const [form, setForm] = useState({ name: '', type: 'UTILITY', amount: '', dueDay: '', isEssential: true })
+
+  async function load() {
+    setLoading(true); setError('')
+    try {
+      const [planResponse, accountResponse] = await Promise.all([fetch('/api/plan?period=month'), fetch('/api/accounts')])
+      if (!planResponse.ok) throw new Error((await planResponse.json()).error || 'Unable to load payments')
+      const plan: Plan = await planResponse.json()
+      setItems(plan.items.filter(item => item.kind === 'PAYMENT').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()))
+      setAccounts(await accountResponse.json())
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to load payments') } finally { setLoading(false) }
   }
   useEffect(() => { load() }, [])
 
-  async function save(event: React.FormEvent) {
-    event.preventDefault(); setLoading(true); setError('')
+  async function markPaid() {
+    if (!paying) return
+    const target = paymentTarget(paying)
+    if (!target) return
+    setSaving(true); setError('')
     try {
-      const response = await fetch(editing ? `/api/payment-plans/${editing.id}` : '/api/payment-plans', {
-        method: editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, amount: Number(form.amount), dueDay: Number(form.dueDay), accountId: form.accountId || null, notes: form.notes || null }),
-      })
-      if (!response.ok) throw new Error((await response.json()).error || 'Unable to save bill')
-      setFormOpen(false); setEditing(null); setForm(emptyForm()); await load()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to save bill') } finally { setLoading(false) }
+      let response: Response
+      if (target.type === 'plan') response = await fetch(`/api/payment-plans/${target.id}/pay`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dueDate: paying.date.slice(0, 10), amount: Number(paying.amount), accountId }) })
+      else if (target.type === 'debt') response = await fetch(`/api/debts/${target.id}/pay`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: Number(paying.amount), paidDate: paying.date.slice(0, 10), accountId: accountId || undefined }) })
+      else response = await fetch(`/api/credit-cards/${target.id}/pay`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: Number(paying.amount), accountId: accountId || undefined }) })
+      if (!response.ok) throw new Error((await response.json()).error || 'Unable to mark payment')
+      setPaying(null); setAccountId(''); await load()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to mark payment') } finally { setSaving(false) }
   }
 
-  function edit(bill: Bill) {
-    setError(''); setEditing(bill); setForm({ name: bill.name, type: bill.type, amount: String(bill.amount), dueDay: String(bill.dueDay), isEssential: bill.isEssential, accountId: bill.account?.id || '', notes: bill.notes || '' }); setFormOpen(true)
-  }
-
-  async function remove(bill: Bill) {
-    if (!confirm(`Delete ${bill.name}?`)) return
-    await fetch(`/api/payment-plans/${bill.id}`, { method: 'DELETE' }); load()
-  }
-
-  async function recordPayment(event: React.FormEvent) {
-    event.preventDefault(); if (!paying) return; setLoading(true); setError('')
-    const now = new Date()
-    const dueDate = new Date(now.getFullYear(), now.getMonth(), Math.min(paying.dueDay, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate())).toISOString().slice(0, 10)
+  async function addRecurring(event: React.FormEvent) {
+    event.preventDefault(); setSaving(true); setError('')
     try {
-      const response = await fetch(`/api/payment-plans/${paying.id}/pay`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dueDate, amount: Number(paidAmount), accountId: paymentAccountId }) })
-      if (!response.ok) throw new Error((await response.json()).error || 'Unable to record payment')
-      setPaying(null); setPaidAmount(''); setPaymentAccountId(''); await load()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to record payment') } finally { setLoading(false) }
+      const response = await fetch('/api/payment-plans', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, amount: Number(form.amount), dueDay: Number(form.dueDay), accountId: null }) })
+      if (!response.ok) throw new Error((await response.json()).error || 'Unable to add payment')
+      setAddOpen(false); setForm({ name: '', type: 'UTILITY', amount: '', dueDay: '', isEssential: true }); await load()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to add payment') } finally { setSaving(false) }
   }
 
-  const monthlyTotal = bills.reduce((sum, bill) => sum + Number(bill.amount), 0)
-  const requiredTotal = bills.filter(bill => bill.isEssential).reduce((sum, bill) => sum + Number(bill.amount), 0)
-  const today = new Date().getDate()
-  const upcoming = [...bills].filter(bill => bill.dueDay >= today).sort((a, b) => a.dueDay - b.dueDay)
+  const total = items.reduce((sum, item) => sum + Number(item.amount), 0)
+  const overdue = items.filter(item => item.status === 'OVERDUE').length
 
-  return <div className="mx-auto max-w-3xl space-y-3 px-3 py-3 sm:space-y-4 sm:px-4 sm:py-4">
-    <Card className="bg-gradient-to-br from-primary to-primary-hover p-4 text-white sm:p-5"><p className="text-sm text-white/75">Payments this month</p><p className="mt-1 whitespace-nowrap text-3xl font-bold">{formatCurrency(monthlyTotal)}</p><div className="mt-3 truncate border-t border-white/15 pt-3 text-xs text-white/75">{upcoming.length} upcoming · {formatCurrency(requiredTotal)} required</div></Card>
-    {upcoming.length > 0 && <section className="space-y-2"><div className="flex items-center gap-2 px-1"><CalendarClock size={16} className="text-primary" /><div><h2 className="text-sm font-semibold">Upcoming this month</h2><p className="text-xs text-gray-500">Your next recurring payments</p></div></div><Card className="divide-y divide-border overflow-hidden dark:divide-gray-800">{upcoming.slice(0, 5).map(bill => <div key={bill.id} className="flex items-center gap-3 px-3.5 py-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">{bill.dueDay}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{bill.name}</p><p className="text-[11px] text-gray-500">Due {bill.dueDay === today ? 'today' : `on day ${bill.dueDay}`}</p></div><p className="whitespace-nowrap text-sm font-bold">{formatCurrency(bill.amount)}</p></div>)}</Card></section>}
-    <Button onClick={() => { setError(''); setEditing(null); setForm(emptyForm()); setFormOpen(true) }} className="w-full gap-2"><Plus size={16} /> Add recurring payment</Button>
+  return <div className="mx-auto max-w-3xl space-y-4 px-3 py-3 sm:space-y-5 sm:px-4 sm:py-4">
+    <Card className="bg-gradient-to-br from-primary to-primary-hover p-4 text-white sm:p-5"><p className="text-sm text-white/75">Payments this month</p><p className="mt-1 whitespace-nowrap text-3xl font-bold tabular-nums">{formatCurrency(total)}</p><p className="mt-2 text-xs text-white/70">{items.length} obligation{items.length === 1 ? '' : 's'} · {overdue ? `${overdue} overdue` : 'Nothing overdue'}</p></Card>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    {bills.length === 0 ? <Card className="p-8 text-center text-sm text-gray-500">No recurring bills yet.</Card> : <div className="space-y-3">{bills.map(bill => <Card key={bill.id} className="p-3.5 sm:p-4"><div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5"><div className="min-w-0"><div className="flex min-w-0 items-center gap-1.5"><p className="truncate font-semibold">{bill.name}</p><Badge className="shrink-0 bg-primary/10 text-[10px] text-primary">{labels[bill.type] || bill.type}</Badge>{!bill.isEssential && <Badge className="shrink-0 bg-gray-100 text-[10px] text-gray-500 dark:bg-gray-800">Optional</Badge>}</div><p className="mt-1 truncate text-[11px] text-gray-500 sm:text-xs">Day {bill.dueDay}{bill.account ? ` · ${bill.account.name}` : ' · choose account when paying'}</p>{bill.notes && <p className="mt-2 truncate text-xs text-gray-500">{bill.notes}</p>}</div><p className="whitespace-nowrap text-sm font-bold min-[390px]:text-base">{formatCurrency(bill.amount)}</p></div><div className="mt-3 flex justify-end gap-2 border-t border-border pt-3 dark:border-gray-800"><Button size="sm" variant="outline" onClick={() => edit(bill)} className="shrink-0"><Pencil size={13} /></Button><Button size="sm" variant="outline" onClick={() => remove(bill)} className="shrink-0 text-danger"><Trash2 size={13} /></Button><Button size="sm" onClick={() => { setError(''); setPaying(bill); setPaidAmount(String(bill.amount)); setPaymentAccountId(bill.account?.id || '') }} className="shrink-0 gap-1"><CheckCircle2 size={13} /> Paid</Button></div></Card>)}</div>}
-    <p className="px-1 text-center text-xs text-gray-500">Loans and EMIs belong in <Link href="/debts" className="font-semibold text-primary">Loans</Link>. Credit card bills are tracked in <Link href="/accounts" className="font-semibold text-primary">Cards</Link> and included in your forecast.</p>
+    <div className="flex items-end justify-between px-1"><div><h2 className="font-semibold">Upcoming obligations</h2><p className="text-xs text-gray-500">Tap paid after each payment goes out</p></div><Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="gap-1"><Plus size={14} /> Add</Button></div>
+    {loading ? <Card className="p-8 text-center text-sm text-gray-500">Loading payments…</Card> : items.length === 0 ? <Card className="p-8 text-center"><CalendarClock className="mx-auto text-gray-400" /><p className="mt-2 font-semibold">No payments this month</p><p className="mt-1 text-sm text-gray-500">Add a recurring payment, loan, or card bill to see it here.</p></Card> : <Card className="divide-y divide-border overflow-hidden dark:divide-gray-800">{items.map(item => <div key={item.id} className="flex items-center gap-3 px-3.5 py-3.5"><div className={`flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl ${item.status === 'OVERDUE' ? 'bg-danger/10 text-danger' : 'bg-primary/10 text-primary'}`}><CalendarClock size={15} /><span className="text-[9px] font-bold">{new Date(item.date).getDate()}</span></div><div className="min-w-0 flex-1"><div className="flex items-center gap-1.5"><p className="truncate text-sm font-semibold">{item.name}</p>{item.status === 'OVERDUE' && <Badge className="bg-danger/10 text-[10px] text-danger">Overdue</Badge>}</div><p className="mt-0.5 truncate text-[11px] text-gray-500">{dayLabel(item.date)} · {item.isEssential ? 'Required' : 'Optional'} · {item.source === 'DEBT' ? 'Loan/debt' : item.source === 'CARD' || item.source === 'PAY_LATER' ? 'Card bill' : 'Recurring'}</p></div><div className="shrink-0 text-right"><p className="text-sm font-bold tabular-nums">{formatCurrency(item.amount)}</p><Button size="sm" className="mt-1 gap-1" onClick={() => { setPaying(item); setAccountId('') }}><CheckCircle2 size={13} /> Paid</Button></div></div>)}</Card>}
+    <p className="px-1 text-center text-xs text-gray-500">Loans, debts, and card bills appear here automatically from Accounts.</p>
 
-    <Sheet open={formOpen} onClose={() => setFormOpen(false)} title={editing ? 'Edit recurring bill' : 'Add recurring bill'}><form onSubmit={save} className="space-y-4 pb-4"><Input label="Bill name" value={form.name} onChange={set('name')} placeholder="e.g. Electricity" required /><Select label="Type" value={form.type} onChange={set('type')}>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select><div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2"><Input label="Monthly amount" type="number" min="0.01" step="0.01" value={form.amount} onChange={set('amount')} required /><Input label="Due day" type="number" min="1" max="31" value={form.dueDay} onChange={set('dueDay')} required /></div><Select label="Pay from account" value={form.accountId} onChange={set('accountId')}><option value="">Choose when paying</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</Select><label className="flex items-center gap-2 rounded-xl bg-surface-offset p-3 text-sm dark:bg-gray-800"><input type="checkbox" checked={form.isEssential} onChange={set('isEssential')} /> Required monthly payment</label><Input label="Notes (optional)" value={form.notes} onChange={set('notes')} />{error && <p role="alert" className="text-sm text-danger">{error}</p>}<Button type="submit" loading={loading}>{editing ? 'Save changes' : 'Add bill'}</Button></form></Sheet>
-    <Sheet open={Boolean(paying)} onClose={() => { setPaying(null); setPaymentAccountId('') }} title="Record bill payment">{paying && <form onSubmit={recordPayment} className="space-y-4 pb-4"><p className="rounded-xl bg-surface-offset p-3 text-sm dark:bg-gray-800">{paying.name} · due day {paying.dueDay}</p><Input label="Amount paid" type="number" min="0.01" step="0.01" value={paidAmount} onChange={event => setPaidAmount(event.target.value)} required /><Select label="Pay from account" value={paymentAccountId} onChange={event => setPaymentAccountId(event.target.value)} required><option value="">Select account</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</Select>{error && <p role="alert" className="text-sm text-danger">{error}</p>}<Button type="submit" loading={loading} disabled={!paymentAccountId}>Record payment</Button></form>}</Sheet>
+    <Sheet open={Boolean(paying)} onClose={() => setPaying(null)} title="Mark payment as paid">{paying && <div className="space-y-4 pb-4"><div className="rounded-xl bg-surface-offset p-3 dark:bg-gray-800"><p className="font-semibold">{paying.name}</p><p className="mt-1 text-sm text-gray-500">{dayLabel(paying.date)} · {formatCurrency(paying.amount)}</p></div><Select label="Paid from account" value={accountId} onChange={event => setAccountId(event.target.value)} required><option value="">Select account</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</Select>{error && <p role="alert" className="text-sm text-danger">{error}</p>}<Button loading={saving} onClick={markPaid} disabled={!accountId}>Mark paid</Button></div>}</Sheet>
+    <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Add recurring payment"><form onSubmit={addRecurring} className="space-y-4 pb-4"><Input label="Payment name" value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder="e.g. Electricity" required /><Select label="Type" value={form.type} onChange={event => setForm(current => ({ ...current, type: event.target.value }))}>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select><div className="grid grid-cols-2 gap-3"><Input label="Amount" type="number" min="0.01" step="0.01" value={form.amount} onChange={event => setForm(current => ({ ...current, amount: event.target.value }))} required /><Input label="Due day" type="number" min="1" max="31" value={form.dueDay} onChange={event => setForm(current => ({ ...current, dueDay: event.target.value }))} required /></div><label className="flex items-center gap-2 rounded-xl bg-surface-offset p-3 text-sm dark:bg-gray-800"><input type="checkbox" checked={form.isEssential} onChange={event => setForm(current => ({ ...current, isEssential: event.target.checked }))} /> Required payment</label><Button type="submit" loading={saving}>Add payment</Button></form></Sheet>
   </div>
 }
