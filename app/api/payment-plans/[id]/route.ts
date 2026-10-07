@@ -13,12 +13,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = paymentPlanSchema.partial().safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   if (parsed.data.accountId && !await prisma.account.findFirst({ where: { id: parsed.data.accountId, userId: session.user.id, isActive: true } })) return NextResponse.json({ error: 'Payment account not found' }, { status: 404 })
+  const { archived, ...fields } = parsed.data
   const updated = await prisma.paymentPlan.update({
     where: { id },
     data: {
-      ...parsed.data,
+      ...fields,
+      ...(archived !== undefined && { archivedAt: archived ? new Date() : null }),
       ...(parsed.data.accountId !== undefined && { accountId: parsed.data.accountId || null }),
       ...(parsed.data.startDate !== undefined && { startDate: new Date(parsed.data.startDate) }),
+      ...(parsed.data.endDate !== undefined && { endDate: parsed.data.endDate ? new Date(parsed.data.endDate) : null }),
     },
   })
   return NextResponse.json(toJson(updated))

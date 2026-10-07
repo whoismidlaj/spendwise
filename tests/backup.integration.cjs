@@ -65,7 +65,10 @@ test('current JSON backup restores all monthly-planning data', async () => {
         paymentAmount: 5500,
         totalInstallments: 12,
         startDate: new Date('2026-06-07T12:00:00Z'),
-        payments: { create: { amount: 5000, paidDate: new Date('2026-07-07T12:00:00Z'), accountId: account.id } },
+        totalRepaymentAmount: 72000,
+        totalInterestAmount: 12000,
+        installmentSchedule: [{ number: 1, dueDate: '2026-06-07', amount: 5500, principal: 4500, interest: 1000, opening: 60000, closing: 55500 }],
+        payments: { create: { amount: 5000, principalAmount: 4000, paidDate: new Date('2026-07-07T12:00:00Z'), accountId: account.id } },
       },
     })
     const income = await prisma.incomeSource.create({
@@ -101,7 +104,7 @@ test('current JSON backup restores all monthly-planning data', async () => {
     const backupResponse = await backupRoute.GET()
     assert.equal(backupResponse.status, 200)
     const backup = await backupResponse.json()
-    assert.equal(backup.version, '3.0')
+    assert.equal(backup.version, '3.2')
     assert.equal(backup.schema, 'monthly-planning')
     assert.equal(backup.categories, undefined)
     assert.equal(backup.budgets, undefined)
@@ -136,7 +139,11 @@ test('current JSON backup restores all monthly-planning data', async () => {
     assert.equal(Number(restoredCard.expectedDue), 11000)
     assert.equal(restoredCard.reminderDays, 7)
     assert.equal(restoredDebt.totalInstallments, 12)
+    assert.equal(Number(restoredDebt.totalRepaymentAmount), 72000)
+    assert.equal(Number(restoredDebt.totalInterestAmount), 12000)
+    assert.equal(restoredDebt.installmentSchedule[0].principal, 4500)
     assert.equal(restoredDebt.payments.length, 1)
+    assert.equal(Number(restoredDebt.payments[0].principalAmount), 4000)
     assert.equal(restoredDebt.payments[0].id, backup.debts.find(item => item.id === debt.id).payments[0].id)
     assert.equal(Number(restoredIncome.expectedInHand), 68000)
     assert.equal(restoredIncome.occurrences[0].status, 'RECEIVED')

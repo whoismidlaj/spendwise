@@ -7,7 +7,8 @@ import { z } from 'zod'
 const incomeUpdateSchema = z.object({
   name: z.string().trim().min(1).optional(),
   type: z.enum(['SALARY', 'FREELANCE', 'RENTAL', 'INTEREST', 'OTHER']).optional(),
-  payday: z.number().int().min(1).max(31).optional(),
+  payday: z.number().int().min(1).max(31).nullable().optional(),
+  paydayRule: z.enum(['DAY_OF_MONTH', 'LAST_WORKING_DAY']).optional(),
   grossAmount: z.number().finite().nonnegative().nullable().optional(),
   expectedInHand: z.number().finite().positive().optional(),
   defaultDeductions: z.number().finite().nonnegative().optional(),

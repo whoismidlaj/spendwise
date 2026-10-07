@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "node --test tests/*.cjs tests/unit/*.cjs",
+    "test:clocks": "for d in 2026-12-31T23:30:00 2028-02-29T12:00:00 2027-01-01T00:10:00 2026-03-31T09:00:00; do SPENDWISE_FAKE_NOW=$d npm test || exit 1; done",
+    "test:unit": "node --test tests/unit/*.cjs",
     "prisma:seed": "ts-node --project tsconfig.seed.json prisma/seed.ts"
   },
   "dependencies": {
@@ -35,9 +38,6 @@
     "tailwindcss": "^3.4.17",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
-  },
-  "prisma": {
-    "seed": "ts-node --project tsconfig.seed.json prisma/seed.ts"
   },
   "engines": {
     "node": ">=18.0.0"

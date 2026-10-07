@@ -100,6 +100,8 @@ model IncomeSource {
   type              IncomeType      @default(SALARY)
   frequency         IncomeFrequency @default(MONTHLY)
   payday            Int?
+  // DAY_OF_MONTH uses payday; LAST_WORKING_DAY pays on the last Monday-Friday of the month.
+  paydayRule        String          @default("DAY_OF_MONTH")
   grossAmount       Decimal?        @db.Decimal(15, 2)
   expectedInHand    Decimal         @db.Decimal(15, 2)
   defaultDeductions Decimal         @default(0) @db.Decimal(15, 2)
@@ -139,6 +141,9 @@ model PaymentPlan {
   isEssential Boolean         @default(true)
   isActive    Boolean         @default(true)
   startDate   DateTime        @default(now())
+  endDate     DateTime?
+  // Archived records leave Payments and the forecast; history stays viewable.
+  archivedAt  DateTime?
   notes       String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
@@ -155,6 +160,8 @@ model PaymentPlanOccurrence {
   amount        Decimal     @db.Decimal(15, 2)
   paidAt        DateTime?
   accountId     String?
+  // Internal ledger entry created when the occurrence was marked paid; used for exact reversal.
+  transactionId String?
   createdAt     DateTime    @default(now())
 
   paymentPlan PaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
@@ -184,6 +191,45 @@ model CreditCard {
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  bills        CardBill[]
+  payments     CardPayment[]
+}
+
+// One statement cycle. Snapshotted when a payment is recorded so history stays reproducible.
+model CardBill {
+  id              String    @id @default(cuid())
+  creditCardId    String
+  statementDate   DateTime?
+  dueDate         DateTime
+  statementAmount Decimal   @db.Decimal(15, 2)
+  minimumDue      Decimal   @default(0) @db.Decimal(15, 2)
+  paidAmount      Decimal   @default(0) @db.Decimal(15, 2)
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  creditCard CreditCard    @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  payments   CardPayment[]
+
+  @@unique([creditCardId, dueDate])
+}
+
+model CardPayment {
+  id            String   @id @default(cuid())
+  creditCardId  String
+  cardBillId    String?
+  amount        Decimal  @db.Decimal(15, 2)
+  paidDate      DateTime @default(now())
+  accountId     String?
+  transactionId String?
+  // Exact amounts taken off the live card fields, so undo restores them precisely.
+  usedDelta     Decimal  @db.Decimal(15, 2)
+  dueDelta      Decimal  @db.Decimal(15, 2)
+  minimumDelta  Decimal  @db.Decimal(15, 2)
+  expectedDelta Decimal  @db.Decimal(15, 2)
+  createdAt     DateTime @default(now())
+
+  creditCard CreditCard @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  cardBill   CardBill?  @relation(fields: [cardBillId], references: [id], onDelete: SetNull)
 }
 
 model Transaction {
@@ -247,6 +293,12 @@ model Debt {
   paymentAmount Decimal?     @db.Decimal(15, 2)
   totalInstallments Int?
   startDate     DateTime?
+  // Official lender totals may differ from a rounded/generated schedule.
+  totalRepaymentAmount Decimal? @db.Decimal(15, 2)
+  totalInterestAmount  Decimal? @db.Decimal(15, 2)
+  // Optional lender-provided schedule. Each item may contain dueDate, amount,
+  // principal, interest, and opening/closing balances.
+  installmentSchedule Json?
   
   // Normal/One-time Details
   deadline      DateTime?    
@@ -265,8 +317,17 @@ model DebtPayment {
   id        String   @id @default(cuid())
   debtId    String
   amount    Decimal  @db.Decimal(15, 2)
+  principalAmount Decimal? @db.Decimal(15, 2)
+  interestAmount  Decimal? @db.Decimal(15, 2)
+  // Stable link to the installment this payment settled (null for ad-hoc payments).
+  installmentNumber Int?
+  scheduledDueDate  DateTime?
+  // Internal ledger entry created for this payment, used for exact reversal.
+  transactionId String?
   paidDate  DateTime @default(now())
   accountId String?  
 
   debt      Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
+
+  @@unique([debtId, installmentNumber])
 }

@@ -1,0 +1,766 @@
+[
+  {
+    "name": "Bajaj Term Loan",
+    "type": "LOAN",
+    "direction": "BORROWED",
+    "amount": 88902,
+    "remaining": 64793,
+    "interestRate": 31,
+    "paymentAmount": 4036,
+    "paymentDate": 2,
+    "totalInstallments": 33,
+    "startDate": "2025-11-02",
+    "totalRepaymentAmount": null,
+    "totalInterestAmount": null,
+    "installmentSchedule": [
+      {
+        "amount": 4036,
+        "number": 1,
+        "closing": 87163,
+        "dueDate": "2025-11-02",
+        "opening": 88902,
+        "interest": 2297,
+        "principal": 1739
+      },
+      {
+        "amount": 4036,
+        "number": 2,
+        "closing": 85378,
+        "dueDate": "2025-12-02",
+        "opening": 87163,
+        "interest": 2251,
+        "principal": 1785
+      },
+      {
+        "amount": 4036,
+        "number": 3,
+        "closing": 83548,
+        "dueDate": "2026-01-02",
+        "opening": 85378,
+        "interest": 2206,
+        "principal": 1830
+      },
+      {
+        "amount": 4036,
+        "number": 4,
+        "closing": 81670,
+        "dueDate": "2026-02-02",
+        "opening": 83548,
+        "interest": 2158,
+        "principal": 1878
+      },
+      {
+        "amount": 4036,
+        "number": 5,
+        "closing": 79744,
+        "dueDate": "2026-03-02",
+        "opening": 81670,
+        "interest": 2110,
+        "principal": 1926
+      },
+      {
+        "amount": 4036,
+        "number": 6,
+        "closing": 77768,
+        "dueDate": "2026-04-02",
+        "opening": 79744,
+        "interest": 2060,
+        "principal": 1976
+      },
+      {
+        "amount": 4036,
+        "number": 7,
+        "closing": 75741,
+        "dueDate": "2026-05-02",
+        "opening": 77768,
+        "interest": 2009,
+        "principal": 2027
+      },
+      {
+        "amount": 4036,
+        "number": 8,
+        "closing": 73662,
+        "dueDate": "2026-06-02",
+        "opening": 75741,
+        "interest": 1957,
+        "principal": 2079
+      },
+      {
+        "amount": 4036,
+        "number": 9,
+        "closing": 71529,
+        "dueDate": "2026-07-02",
+        "opening": 73662,
+        "interest": 1903,
+        "principal": 2133
+      },
+      {
+        "amount": 4036,
+        "number": 10,
+        "closing": 69341,
+        "dueDate": "2026-08-02",
+        "opening": 71529,
+        "interest": 1848,
+        "principal": 2188
+      },
+      {
+        "amount": 4036,
+        "number": 11,
+        "closing": 67096,
+        "dueDate": "2026-09-02",
+        "opening": 69341,
+        "interest": 1791,
+        "principal": 2245
+      },
+      {
+        "amount": 4036,
+        "number": 12,
+        "closing": 64793,
+        "dueDate": "2026-10-02",
+        "opening": 67096,
+        "interest": 1733,
+        "principal": 2303
+      },
+      {
+        "amount": 4036,
+        "number": 13,
+        "closing": 62431,
+        "dueDate": "2026-11-02",
+        "opening": 64793,
+        "interest": 1674,
+        "principal": 2362
+      },
+      {
+        "amount": 4036,
+        "number": 14,
+        "closing": 60008,
+        "dueDate": "2026-12-02",
+        "opening": 62431,
+        "interest": 1613,
+        "principal": 2423
+      },
+      {
+        "amount": 4036,
+        "number": 15,
+        "closing": 57522,
+        "dueDate": "2027-01-02",
+        "opening": 60008,
+        "interest": 1550,
+        "principal": 2486
+      },
+      {
+        "amount": 4036,
+        "number": 16,
+        "closing": 54972,
+        "dueDate": "2027-02-02",
+        "opening": 57522,
+        "interest": 1486,
+        "principal": 2550
+      },
+      {
+        "amount": 4036,
+        "number": 17,
+        "closing": 52356,
+        "dueDate": "2027-03-02",
+        "opening": 54972,
+        "interest": 1420,
+        "principal": 2616
+      },
+      {
+        "amount": 4036,
+        "number": 18,
+        "closing": 49673,
+        "dueDate": "2027-04-02",
+        "opening": 52356,
+        "interest": 1353,
+        "principal": 2683
+      },
+      {
+        "amount": 4036,
+        "number": 19,
+        "closing": 46920,
+        "dueDate": "2027-05-02",
+        "opening": 49673,
+        "interest": 1283,
+        "principal": 2753
+      },
+      {
+        "amount": 4036,
+        "number": 20,
+        "closing": 44096,
+        "dueDate": "2027-06-02",
+        "opening": 46920,
+        "interest": 1212,
+        "principal": 2824
+      },
+      {
+        "amount": 4036,
+        "number": 21,
+        "closing": 41199,
+        "dueDate": "2027-07-02",
+        "opening": 44096,
+        "interest": 1139,
+        "principal": 2897
+      },
+      {
+        "amount": 4036,
+        "number": 22,
+        "closing": 38227,
+        "dueDate": "2027-08-02",
+        "opening": 41199,
+        "interest": 1064,
+        "principal": 2972
+      },
+      {
+        "amount": 4036,
+        "number": 23,
+        "closing": 35179,
+        "dueDate": "2027-09-02",
+        "opening": 38227,
+        "interest": 988,
+        "principal": 3048
+      },
+      {
+        "amount": 4036,
+        "number": 24,
+        "closing": 32052,
+        "dueDate": "2027-10-02",
+        "opening": 35179,
+        "interest": 909,
+        "principal": 3127
+      },
+      {
+        "amount": 4036,
+        "number": 25,
+        "closing": 28844,
+        "dueDate": "2027-11-02",
+        "opening": 32052,
+        "interest": 828,
+        "principal": 3208
+      },
+      {
+        "amount": 4036,
+        "number": 26,
+        "closing": 25553,
+        "dueDate": "2027-12-02",
+        "opening": 28844,
+        "interest": 745,
+        "principal": 3291
+      },
+      {
+        "amount": 4036,
+        "number": 27,
+        "closing": 22177,
+        "dueDate": "2028-01-02",
+        "opening": 25553,
+        "interest": 660,
+        "principal": 3376
+      },
+      {
+        "amount": 4036,
+        "number": 28,
+        "closing": 18714,
+        "dueDate": "2028-02-02",
+        "opening": 22177,
+        "interest": 573,
+        "principal": 3463
+      },
+      {
+        "amount": 4036,
+        "number": 29,
+        "closing": 15161,
+        "dueDate": "2028-03-02",
+        "opening": 18714,
+        "interest": 483,
+        "principal": 3553
+      },
+      {
+        "amount": 4036,
+        "number": 30,
+        "closing": 11517,
+        "dueDate": "2028-04-02",
+        "opening": 15161,
+        "interest": 392,
+        "principal": 3644
+      },
+      {
+        "amount": 4036,
+        "number": 31,
+        "closing": 7778,
+        "dueDate": "2028-05-02",
+        "opening": 11517,
+        "interest": 297,
+        "principal": 3739
+      },
+      {
+        "amount": 4036,
+        "number": 32,
+        "closing": 3943,
+        "dueDate": "2028-06-02",
+        "opening": 7778,
+        "interest": 201,
+        "principal": 3835
+      },
+      {
+        "amount": 4045,
+        "number": 33,
+        "closing": 0,
+        "dueDate": "2028-07-02",
+        "opening": 3943,
+        "interest": 102,
+        "principal": 3943
+      }
+    ],
+    "payments": [
+      {
+        "installmentNumber": 1,
+        "amount": 4036,
+        "principalAmount": 1739,
+        "interestAmount": 2297,
+        "paidDate": "2025-11-02"
+      },
+      {
+        "installmentNumber": 2,
+        "amount": 4036,
+        "principalAmount": 1785,
+        "interestAmount": 2251,
+        "paidDate": "2025-12-02"
+      },
+      {
+        "installmentNumber": 3,
+        "amount": 4036,
+        "principalAmount": 1830,
+        "interestAmount": 2206,
+        "paidDate": "2026-01-02"
+      },
+      {
+        "installmentNumber": 4,
+        "amount": 4036,
+        "principalAmount": 1878,
+        "interestAmount": 2158,
+        "paidDate": "2026-02-02"
+      },
+      {
+        "installmentNumber": 5,
+        "amount": 4036,
+        "principalAmount": 1926,
+        "interestAmount": 2110,
+        "paidDate": "2026-03-02"
+      },
+      {
+        "installmentNumber": 6,
+        "amount": 4036,
+        "principalAmount": 1976,
+        "interestAmount": 2060,
+        "paidDate": "2026-04-02"
+      },
+      {
+        "installmentNumber": 7,
+        "amount": 4036,
+        "principalAmount": 2027,
+        "interestAmount": 2009,
+        "paidDate": "2026-05-02"
+      },
+      {
+        "installmentNumber": 8,
+        "amount": 4036,
+        "principalAmount": 2079,
+        "interestAmount": 1957,
+        "paidDate": "2026-06-02"
+      },
+      {
+        "installmentNumber": 9,
+        "amount": 4036,
+        "principalAmount": 2133,
+        "interestAmount": 1903,
+        "paidDate": "2026-07-02"
+      },
+      {
+        "installmentNumber": 10,
+        "amount": 4036,
+        "principalAmount": 2188,
+        "interestAmount": 1848,
+        "paidDate": "2026-08-02"
+      },
+      {
+        "installmentNumber": 11,
+        "amount": 4036,
+        "principalAmount": 2245,
+        "interestAmount": 1791,
+        "paidDate": "2026-09-02"
+      },
+      {
+        "installmentNumber": 12,
+        "amount": 4036,
+        "principalAmount": 2303,
+        "interestAmount": 1733,
+        "paidDate": "2026-10-02"
+      }
+    ],
+    "expected": {
+      "principalOutstanding": 64793,
+      "totalPaid": 48432,
+      "principalPaid": 24109,
+      "futureInstallmentTotal": 84765,
+      "futurePrincipal": 64793,
+      "futureInterest": 19972
+    }
+  },
+  {
+    "name": "SuperMoney Finnable Personal Loan",
+    "type": "LOAN",
+    "direction": "BORROWED",
+    "amount": 159405,
+    "remaining": 156436,
+    "interestRate": 25.99,
+    "paymentAmount": 6421,
+    "paymentDate": 5,
+    "totalInstallments": 36,
+    "startDate": "2026-10-05",
+    "totalRepaymentAmount": 231334,
+    "totalInterestAmount": 71929,
+    "installmentSchedule": [
+      {
+        "amount": 6487,
+        "number": 1,
+        "closing": 156436,
+        "dueDate": "2026-10-05",
+        "opening": 159405,
+        "interest": 3518,
+        "principal": 2969
+      },
+      {
+        "amount": 6421,
+        "number": 2,
+        "closing": 153403.6,
+        "dueDate": "2026-11-05",
+        "opening": 156436.45,
+        "interest": 3388.15,
+        "principal": 3032.85
+      },
+      {
+        "amount": 6421,
+        "number": 3,
+        "closing": 150305.07,
+        "dueDate": "2026-12-05",
+        "opening": 153403.6,
+        "interest": 3322.47,
+        "principal": 3098.53
+      },
+      {
+        "amount": 6421,
+        "number": 4,
+        "closing": 147139.43,
+        "dueDate": "2027-01-05",
+        "opening": 150305.07,
+        "interest": 3255.36,
+        "principal": 3165.64
+      },
+      {
+        "amount": 6421,
+        "number": 5,
+        "closing": 143905.22,
+        "dueDate": "2027-02-05",
+        "opening": 147139.43,
+        "interest": 3186.79,
+        "principal": 3234.21
+      },
+      {
+        "amount": 6421,
+        "number": 6,
+        "closing": 140600.97,
+        "dueDate": "2027-03-05",
+        "opening": 143905.22,
+        "interest": 3116.75,
+        "principal": 3304.25
+      },
+      {
+        "amount": 6421,
+        "number": 7,
+        "closing": 137225.15,
+        "dueDate": "2027-04-05",
+        "opening": 140600.97,
+        "interest": 3045.18,
+        "principal": 3375.82
+      },
+      {
+        "amount": 6421,
+        "number": 8,
+        "closing": 133776.22,
+        "dueDate": "2027-05-05",
+        "opening": 137225.15,
+        "interest": 2972.07,
+        "principal": 3448.93
+      },
+      {
+        "amount": 6421,
+        "number": 9,
+        "closing": 130252.59,
+        "dueDate": "2027-06-05",
+        "opening": 133776.22,
+        "interest": 2897.37,
+        "principal": 3523.63
+      },
+      {
+        "amount": 6421,
+        "number": 10,
+        "closing": 126652.64,
+        "dueDate": "2027-07-05",
+        "opening": 130252.59,
+        "interest": 2821.05,
+        "principal": 3599.95
+      },
+      {
+        "amount": 6421,
+        "number": 11,
+        "closing": 122974.73,
+        "dueDate": "2027-08-05",
+        "opening": 126652.64,
+        "interest": 2743.09,
+        "principal": 3677.91
+      },
+      {
+        "amount": 6421,
+        "number": 12,
+        "closing": 119217.16,
+        "dueDate": "2027-09-05",
+        "opening": 122974.73,
+        "interest": 2663.43,
+        "principal": 3757.57
+      },
+      {
+        "amount": 6421,
+        "number": 13,
+        "closing": 115378.2,
+        "dueDate": "2027-10-05",
+        "opening": 119217.16,
+        "interest": 2582.04,
+        "principal": 3838.96
+      },
+      {
+        "amount": 6421,
+        "number": 14,
+        "closing": 111456.1,
+        "dueDate": "2027-11-05",
+        "opening": 115378.2,
+        "interest": 2498.9,
+        "principal": 3922.1
+      },
+      {
+        "amount": 6421,
+        "number": 15,
+        "closing": 107449.05,
+        "dueDate": "2027-12-05",
+        "opening": 111456.1,
+        "interest": 2413.95,
+        "principal": 4007.05
+      },
+      {
+        "amount": 6421,
+        "number": 16,
+        "closing": 103355.22,
+        "dueDate": "2028-01-05",
+        "opening": 107449.05,
+        "interest": 2327.17,
+        "principal": 4093.83
+      },
+      {
+        "amount": 6421,
+        "number": 17,
+        "closing": 99172.72,
+        "dueDate": "2028-02-05",
+        "opening": 103355.22,
+        "interest": 2238.5,
+        "principal": 4182.5
+      },
+      {
+        "amount": 6421,
+        "number": 18,
+        "closing": 94899.64,
+        "dueDate": "2028-03-05",
+        "opening": 99172.72,
+        "interest": 2147.92,
+        "principal": 4273.08
+      },
+      {
+        "amount": 6421,
+        "number": 19,
+        "closing": 90534.01,
+        "dueDate": "2028-04-05",
+        "opening": 94899.64,
+        "interest": 2055.37,
+        "principal": 4365.63
+      },
+      {
+        "amount": 6421,
+        "number": 20,
+        "closing": 86073.83,
+        "dueDate": "2028-05-05",
+        "opening": 90534.01,
+        "interest": 1960.82,
+        "principal": 4460.18
+      },
+      {
+        "amount": 6421,
+        "number": 21,
+        "closing": 81517.05,
+        "dueDate": "2028-06-05",
+        "opening": 86073.83,
+        "interest": 1864.22,
+        "principal": 4556.78
+      },
+      {
+        "amount": 6421,
+        "number": 22,
+        "closing": 76861.57,
+        "dueDate": "2028-07-05",
+        "opening": 81517.05,
+        "interest": 1765.52,
+        "principal": 4655.48
+      },
+      {
+        "amount": 6421,
+        "number": 23,
+        "closing": 72105.26,
+        "dueDate": "2028-08-05",
+        "opening": 76861.57,
+        "interest": 1664.69,
+        "principal": 4756.31
+      },
+      {
+        "amount": 6421,
+        "number": 24,
+        "closing": 67245.94,
+        "dueDate": "2028-09-05",
+        "opening": 72105.26,
+        "interest": 1561.68,
+        "principal": 4859.32
+      },
+      {
+        "amount": 6421,
+        "number": 25,
+        "closing": 62281.37,
+        "dueDate": "2028-10-05",
+        "opening": 67245.94,
+        "interest": 1456.43,
+        "principal": 4964.57
+      },
+      {
+        "amount": 6421,
+        "number": 26,
+        "closing": 57209.28,
+        "dueDate": "2028-11-05",
+        "opening": 62281.37,
+        "interest": 1348.91,
+        "principal": 5072.09
+      },
+      {
+        "amount": 6421,
+        "number": 27,
+        "closing": 52027.34,
+        "dueDate": "2028-12-05",
+        "opening": 57209.28,
+        "interest": 1239.06,
+        "principal": 5181.94
+      },
+      {
+        "amount": 6421,
+        "number": 28,
+        "closing": 46733.17,
+        "dueDate": "2029-01-05",
+        "opening": 52027.34,
+        "interest": 1126.83,
+        "principal": 5294.17
+      },
+      {
+        "amount": 6421,
+        "number": 29,
+        "closing": 41324.33,
+        "dueDate": "2029-02-05",
+        "opening": 46733.17,
+        "interest": 1012.16,
+        "principal": 5408.84
+      },
+      {
+        "amount": 6421,
+        "number": 30,
+        "closing": 35798.35,
+        "dueDate": "2029-03-05",
+        "opening": 41324.33,
+        "interest": 895.02,
+        "principal": 5525.98
+      },
+      {
+        "amount": 6421,
+        "number": 31,
+        "closing": 30152.68,
+        "dueDate": "2029-04-05",
+        "opening": 35798.35,
+        "interest": 775.33,
+        "principal": 5645.67
+      },
+      {
+        "amount": 6421,
+        "number": 32,
+        "closing": 24384.74,
+        "dueDate": "2029-05-05",
+        "opening": 30152.68,
+        "interest": 653.06,
+        "principal": 5767.94
+      },
+      {
+        "amount": 6421,
+        "number": 33,
+        "closing": 18491.87,
+        "dueDate": "2029-06-05",
+        "opening": 24384.74,
+        "interest": 528.13,
+        "principal": 5892.87
+      },
+      {
+        "amount": 6421,
+        "number": 34,
+        "closing": 12471.37,
+        "dueDate": "2029-07-05",
+        "opening": 18491.87,
+        "interest": 400.5,
+        "principal": 6020.5
+      },
+      {
+        "amount": 6421,
+        "number": 35,
+        "closing": 6320.48,
+        "dueDate": "2029-08-05",
+        "opening": 12471.37,
+        "interest": 270.11,
+        "principal": 6150.89
+      },
+      {
+        "amount": 6457.37,
+        "number": 36,
+        "closing": 0,
+        "dueDate": "2029-09-05",
+        "opening": 6320.48,
+        "interest": 136.89,
+        "principal": 6320.48
+      }
+    ],
+    "payments": [
+      {
+        "installmentNumber": 1,
+        "amount": 6487,
+        "principalAmount": 2969,
+        "interestAmount": 3518,
+        "paidDate": "2026-10-05"
+      }
+    ],
+    "expected": {
+      "principalOutstanding": 156436,
+      "totalPaid": 6487,
+      "principalPaid": 2969,
+      "futureInstallmentTotal": 224771.37,
+      "futurePrincipal": 156436.45,
+      "futureInterest": 68334.92
+    }
+  }
+]

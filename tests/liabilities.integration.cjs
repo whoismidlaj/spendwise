@@ -28,11 +28,16 @@ const paymentPlans = require('../app/api/payment-plans/route')
 const payPaymentPlan = require('../app/api/payment-plans/[id]/pay/route')
 const plan = require('../app/api/plan/route')
 const transactions = require('../app/api/transactions/route')
-const transactionDetail = require('../app/api/transactions/[id]/route')
 const { buildLoanSchedule } = require('../lib/loan-schedule')
 function request(body, method = 'POST') {
   return new NextRequest('http://localhost/api/test', { method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
 }
+const { now: clockNow } = require('../lib/clock')
+const monthDay = day => {
+  const now = clockNow()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+const monthEnd = () => { const n = clockNow(); return monthDay(new Date(n.getFullYear(), n.getMonth() + 1, 0).getDate()) }
 function params(id) { return { params: Promise.resolve({ id }) } }
 async function json(response, status = 200) {
   const body = await response.json()
@@ -49,65 +54,15 @@ test('variable bills, usage, repayments and lending remain consistent', async t 
     otherUser = await prisma.user.create({ data: { email: `test-other-${Date.now()}@example.invalid`, password: 'unused' } })
     const foreignAccount = await prisma.account.create({ data: { userId: otherUser.id, name: 'Other bank' } })
     let card, lent
-    await t.test('quick payments and transfers adjust balances and card estimates atomically', async () => {
-      const source = await prisma.account.create({ data: { userId, name: 'Quick source', balance: 1000 } })
-      const destination = await prisma.account.create({ data: { userId, name: 'Quick destination', balance: 50 } })
-      const quickCard = await prisma.creditCard.create({ data: {
-        userId, name: 'Quick card', bank: 'Test bank', totalLimit: 5000, usedLimit: 100,
-        expectedDue: 100, dueAmount: 0, minimumDue: 0, dueDate: 20, statementDate: 5,
-      } })
-
-      const groceries = await json(await transactions.POST(request({ mode: 'PAYMENT', amount: 100, name: 'Groceries', date: '2026-09-20', occurredAt: '2026-09-20T14:35:00.000Z', accountId: source.id })), 201)
-      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 900)
-
-      const hosting = await json(await transactions.POST(request({ mode: 'PAYMENT', amount: 25, name: 'Hosting', date: '2026-09-20', creditCardId: quickCard.id })), 201)
-      const cardAfterPurchase = await prisma.creditCard.findUnique({ where: { id: quickCard.id } })
-      assert.equal(Number(cardAfterPurchase.usedLimit), 125)
-      assert.equal(Number(cardAfterPurchase.expectedDue), 125)
-      assert.equal(Number(cardAfterPurchase.dueAmount), 0)
-      assert.equal(Number(cardAfterPurchase.minimumDue), 0)
-
-      const transfer = await json(await transactions.POST(request({ mode: 'TRANSFER', amount: 200, name: 'Move to savings', date: '2026-09-20', accountId: source.id, toAccountId: destination.id })), 201)
-      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 700)
-      assert.equal(Number((await prisma.account.findUnique({ where: { id: destination.id } })).balance), 250)
-      await json(await transactions.POST(request({ mode: 'PAYMENT', amount: 10, name: 'Invalid', date: '2026-09-20', accountId: source.id, creditCardId: quickCard.id })), 400)
+    await t.test('the transaction API is read-only; the ledger is written only by payments and adjustments', async () => {
+      assert.equal(transactions.POST, undefined)
+      assert.equal(transactions.PATCH, undefined)
+      assert.equal(transactions.DELETE, undefined)
       const history = await json(await transactions.GET(new NextRequest('http://localhost/api/transactions?limit=20')))
-      assert.ok(history.transactions.some(item => item.name === 'Groceries' && item.account?.name === 'Quick source' && item.date === '2026-09-20T14:35:00.000Z'))
-      assert.ok(history.transactions.some(item => item.name === 'Hosting' && item.creditCard?.name === 'Quick card'))
-      assert.ok(history.transactions.some(item => item.name === 'Move to savings' && item.toAccount?.name === 'Quick destination'))
-
-      await json(await transactionDetail.PATCH(request({ mode: 'PAYMENT', amount: 150, name: 'Groceries and supplies', date: '2026-09-21', occurredAt: '2026-09-21T09:15:00.000Z', accountId: source.id }, 'PATCH'), params(groceries.id)))
-      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 650)
-      const edited = await prisma.transaction.findUnique({ where: { id: groceries.id } })
-      assert.equal(edited.name, 'Groceries and supplies')
-      assert.equal(Number(edited.amount), 150)
-      assert.equal(edited.date.toISOString(), '2026-09-21T09:15:00.000Z')
-
-      await json(await transactionDetail.DELETE(request({}, 'DELETE'), params(hosting.id)))
-      const cardAfterDelete = await prisma.creditCard.findUnique({ where: { id: quickCard.id } })
-      assert.equal(Number(cardAfterDelete.usedLimit), 100)
-      assert.equal(Number(cardAfterDelete.expectedDue), 100)
-
-      await json(await transactionDetail.DELETE(request({}, 'DELETE'), params(transfer.id)))
-      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 850)
-      assert.equal(Number((await prisma.account.findUnique({ where: { id: destination.id } })).balance), 50)
-
-      const incoming = await json(await transactions.POST(request({ mode: 'INCOME', amount: 300, name: 'Cash refund', date: '2026-09-22', occurredAt: '2026-09-22T11:10:00.000Z', accountId: source.id })), 201)
-      assert.equal(incoming.type, 'INCOME')
-      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 1150)
-      await json(await transactionDetail.PATCH(request({ mode: 'INCOME', amount: 250, name: 'Updated refund', date: '2026-09-22', occurredAt: '2026-09-22T11:15:00.000Z', accountId: destination.id }, 'PATCH'), params(incoming.id)))
-      assert.equal(Number((await prisma.account.findUnique({ where: { id: source.id } })).balance), 850)
-      assert.equal(Number((await prisma.account.findUnique({ where: { id: destination.id } })).balance), 300)
-      await json(await transactionDetail.DELETE(request({}, 'DELETE'), params(incoming.id)))
-      assert.equal(Number((await prisma.account.findUnique({ where: { id: destination.id } })).balance), 50)
-
-      const automatic = await prisma.transaction.create({ data: { userId, accountId: source.id, managedPayment: true, type: 'EXPENSE', amount: 10, name: 'Automatic bill', date: new Date() } })
-      await json(await transactionDetail.DELETE(request({}, 'DELETE'), params(automatic.id)), 400)
-      assert.ok(await prisma.transaction.findUnique({ where: { id: automatic.id } }))
-      await prisma.transaction.delete({ where: { id: automatic.id } })
+      assert.ok(Array.isArray(history.transactions))
     })
     await t.test('pay later accepts a usage estimate and separate bill/minimum', async () => {
-      card = await json(await cards.POST(request({ name: 'Pay Later', bank: 'Provider', type: 'PAYLATER', totalLimit: 5000, usedLimit: 500, dueAmount: 200, minimumDue: 50, dueDate: 20, statementDate: 5, billDueDate: '2026-09-20' })), 201)
+      card = await json(await cards.POST(request({ name: 'Pay Later', bank: 'Provider', type: 'PAYLATER', totalLimit: 5000, usedLimit: 500, dueAmount: 200, minimumDue: 50, dueDate: 20, statementDate: 5, billDueDate: monthDay(20) })), 201)
       assert.equal(card.expectedDue, null)
       const updated = await prisma.creditCard.findUnique({ where: { id: card.id } })
       assert.equal(Number(updated.usedLimit), 500)
@@ -174,8 +129,8 @@ test('variable bills, usage, repayments and lending remain consistent', async t 
       assert.equal(Number(current.expectedDue), 0)
     })
     await t.test('dated card bill appears once and lent balances are excluded from outgoing dues', async () => {
-      await prisma.debt.create({ data: { userId, name: 'Receivable', direction: 'LENT', type: 'PERSONAL', amount: 1000, remaining: 1000, deadline: new Date('2026-09-20') } })
-      await prisma.debt.create({ data: { userId, name: 'Dated payable', type: 'PERSONAL', amount: 75, remaining: 75, deadline: new Date('2026-09-20') } })
+      await prisma.debt.create({ data: { userId, name: 'Receivable', direction: 'LENT', type: 'PERSONAL', amount: 1000, remaining: 1000, deadline: new Date(`${monthDay(20)}T12:00:00`) } })
+      await prisma.debt.create({ data: { userId, name: 'Dated payable', type: 'PERSONAL', amount: 75, remaining: 75, deadline: new Date(`${monthDay(20)}T12:00:00`) } })
       const result = await json(await plan.GET(new NextRequest('http://localhost/api/plan?period=month')))
       assert.equal(result.items.filter(item => item.source === 'PAY_LATER').length, 1)
       assert.equal(result.items.find(item => item.source === 'PAY_LATER').amount, 150)
@@ -184,22 +139,22 @@ test('variable bills, usage, repayments and lending remain consistent', async t 
     })
     await t.test('salary, safety buffer, planned bills and their actual records drive the payment plan', async () => {
       await prisma.user.update({ where: { id: userId }, data: { cashBuffer: 200 } })
-      const salary = await json(await incomeSources.POST(request({ name: 'Take-home salary', type: 'SALARY', payday: 25, grossAmount: 65000, defaultDeductions: 5000, expectedInHand: 60000, accountId: account.id })), 201)
-      const bill = await json(await paymentPlans.POST(request({ name: 'Electricity', type: 'UTILITY', amount: 1000, dueDay: 22, isEssential: true, accountId: account.id })), 201)
+      const salary = await json(await incomeSources.POST(request({ name: 'Take-home salary', type: 'SALARY', payday: 31, grossAmount: 65000, defaultDeductions: 5000, expectedInHand: 60000, accountId: account.id })), 201)
+      const bill = await json(await paymentPlans.POST(request({ name: 'Electricity', type: 'UTILITY', amount: 1000, dueDay: 22, isEssential: true, accountId: account.id, startDate: monthDay(1) })), 201)
       const before = await json(await plan.GET(new NextRequest('http://localhost/api/plan?period=month')))
       assert.ok(before.summary.expectedIncome >= 60000)
       assert.ok(before.summary.requiredPayments >= 1000)
-      await json(await receiveIncome.POST(request({ expectedDate: '2026-09-25', amount: 59500, accountId: account.id }), params(salary.id)))
+      await json(await receiveIncome.POST(request({ expectedDate: monthEnd(), amount: 59500, accountId: account.id }), params(salary.id)))
       assert.equal(Number((await prisma.account.findUnique({ where: { id: account.id } })).balance), 60500)
-      await json(await payPaymentPlan.POST(request({ dueDate: '2026-09-22', amount: 1000, accountId: account.id }), params(bill.id)))
+      await json(await payPaymentPlan.POST(request({ dueDate: monthDay(22), amount: 1000, accountId: account.id }), params(bill.id)))
       assert.equal(Number((await prisma.account.findUnique({ where: { id: account.id } })).balance), 59500)
       const after = await json(await plan.GET(new NextRequest('http://localhost/api/plan?period=month')))
       assert.equal(after.summary.receivedIncome, 59500)
       assert.equal(after.items.some(item => item.name === 'Electricity'), false)
-      await json(await payPaymentPlan.POST(request({ dueDate: '2026-09-22', amount: 1000, accountId: account.id }), params(bill.id)), 400)
+      await json(await payPaymentPlan.POST(request({ dueDate: monthDay(22), amount: 1000, accountId: account.id }), params(bill.id)), 400)
 
       const next = await json(await plan.GET(new NextRequest('http://localhost/api/plan?period=next')))
-      const nextMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
+      const nextMonth = new Date(clockNow().getFullYear(), clockNow().getMonth() + 1, 1)
       assert.ok(next.items.length > 0)
       assert.ok(next.items.every(item => {
         const date = new Date(item.date)
@@ -211,6 +166,39 @@ test('variable bills, usage, repayments and lending remain consistent', async t 
   } finally {
     await prisma.user.delete({ where: { id: user.id } })
     if (otherUser) await prisma.user.delete({ where: { id: otherUser.id } })
+    await prisma.$disconnect()
+  }
+})
+
+test('a passed, unconfirmed payday is not forecast; confirming or skipping resolves it', async () => {
+  const { now } = require('../lib/clock')
+  const incomeRoute = require('../app/api/income-sources/route')
+  const receive = require('../app/api/income-sources/[id]/receive/route')
+  const user = await prisma.user.create({ data: { email: `test-payday-${Date.now()}@example.invalid`, password: 'unused' } })
+  userId = user.id
+  try {
+    const today = now()
+    const account = await prisma.account.create({ data: { userId, name: 'Bank', balance: 1000 } })
+    const early = today.getDate() > 1
+    const source = await json(await incomeSources.POST(request({ name: 'Salary', type: 'SALARY', payday: 1, expectedInHand: 5000, accountId: account.id })), 201)
+    const forecast = async () => json(await plan.GET(new NextRequest('http://localhost/api/plan?period=month')))
+    if (early) {
+      let result = await forecast()
+      assert.equal(result.summary.expectedIncome, 0, 'salary already past is not added again')
+      assert.equal(result.unconfirmedIncome.length, 1)
+      const listed = (await json(await incomeRoute.GET())).find(item => item.id === source.id)
+      assert.ok(listed.pendingPayday)
+      await json(await receive.POST(request({ expectedDate: monthDay(1), amount: 5000, alreadyInBalance: true }), params(source.id)))
+      assert.equal(Number((await prisma.account.findUnique({ where: { id: account.id } })).balance), 1000, 'no second credit')
+      result = await forecast()
+      assert.equal(result.unconfirmedIncome.length, 0)
+    }
+    const rule = await json(await incomeSources.POST(request({ name: 'Contract', type: 'FREELANCE', paydayRule: 'LAST_WORKING_DAY', expectedInHand: 100, accountId: account.id })), 201)
+    assert.equal(rule.paydayRule, 'LAST_WORKING_DAY')
+    const payday = require('../lib/income').lastWorkingDay(today.getFullYear(), today.getMonth()).getDate()
+    assert.equal((await forecast()).summary.expectedIncome >= 100, payday >= today.getDate())
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } })
     await prisma.$disconnect()
   }
 })

@@ -59,7 +59,6 @@ class SpendwiseViewModel(private val api: ApiClient) : ViewModel() {
     } }
 
     fun load() { viewModelScope.launch(Dispatchers.IO) { try { val a = api.accounts(); val t = api.transactions(); withContext(Dispatchers.Main) { accounts = a; transactions = t; loading = false } } catch (e: Exception) { withContext(Dispatchers.Main) { error = e.message; loading = false } } } }
-    fun addExpense(amount: Double, name: String, date: String, accountId: String) { viewModelScope.launch(Dispatchers.IO) { try { api.addExpense(amount, name, date, accountId); load() } catch (e: Exception) { withContext(Dispatchers.Main) { error = e.message } } } }
     fun logout() { api.logout(); loggedIn = false; accounts = emptyList(); transactions = emptyList() }
 }
 
@@ -88,22 +87,14 @@ fun Login(model: SpendwiseViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Dashboard(model: SpendwiseViewModel) {
-    var showAdd by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(Unit) { model.load() }
     Scaffold(topBar = { TopAppBar(title = { Text("Spendwise") }, actions = { OutlinedButton(onClick = model::logout) { Text("Log out") } }) }) { padding ->
         Column(Modifier.padding(padding).padding(horizontal = 16.dp)) {
-            Spacer(Modifier.height(12.dp)); Button(onClick = { showAdd = true }, modifier = Modifier.fillMaxWidth()) { Text("Add transaction") }; Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
             Text("Accounts", style = MaterialTheme.typography.titleLarge)
             model.accounts.forEach { account -> Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(account.name); Text("%.2f".format(account.balance)) } } }
-            Spacer(Modifier.height(16.dp)); Text("Recent transactions", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(16.dp)); Text("Recent balance activity", style = MaterialTheme.typography.titleLarge)
             LazyColumn { items(model.transactions) { transaction -> Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) { Column { Text(transaction.name); Text("${transaction.date} · ${transaction.accountName ?: "Card"}", color = MaterialTheme.colorScheme.onSurfaceVariant) }; Text("${if (transaction.type == "EXPENSE") "−" else "+"} %.2f".format(transaction.amount)) } } }
         }
     }
-    if (showAdd) AddExpense(model, onClose = { showAdd = false })
-}
-
-@Composable
-fun AddExpense(model: SpendwiseViewModel, onClose: () -> Unit) {
-    var name by remember { mutableStateOf("") }; var amount by remember { mutableStateOf("") }; var account by remember { mutableStateOf("") }
-    Card(Modifier.fillMaxWidth().padding(24.dp)) { Column(Modifier.padding(20.dp)) { Text("New expense", style = MaterialTheme.typography.titleLarge); Spacer(Modifier.height(12.dp)); OutlinedTextField(name, { name = it }, label = { Text("What did you pay for?") }, modifier = Modifier.fillMaxWidth()); OutlinedTextField(amount, { amount = it }, label = { Text("Amount") }, modifier = Modifier.fillMaxWidth()); OutlinedTextField(account, { account = it }, label = { Text("Account ID") }, modifier = Modifier.fillMaxWidth()); Spacer(Modifier.height(12.dp)); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick = onClose) { Text("Cancel") }; Button(onClick = { model.addExpense(amount.toDoubleOrNull() ?: 0.0, name, java.time.LocalDate.now().toString(), account); onClose() }, enabled = name.isNotBlank() && (amount.toDoubleOrNull() ?: 0.0) > 0 && account.isNotBlank()) { Text("Save") } } } }
 }

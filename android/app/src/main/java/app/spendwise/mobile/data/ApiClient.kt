@@ -43,13 +43,6 @@ class ApiClient(context: Context) {
         }
     }
 
-    fun addExpense(amount: Double, name: String, date: String, accountId: String) {
-        request("/api/transactions", "POST", JSONObject().apply {
-            put("mode", "PAYMENT"); put("amount", amount); put("name", name)
-            put("date", date); put("accountId", accountId); put("creditCardId", JSONObject.NULL)
-        })
-    }
-
     private fun request(path: String, method: String = "GET", body: JSONObject? = null): JSONObject {
         val connection = open(path, method)
         body?.let { connection.outputStream.use { stream -> stream.write(it.toString().toByteArray()) } }

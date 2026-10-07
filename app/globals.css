@@ -121,3 +121,15 @@
     box-shadow: none !important;
   }
 }
+
+/* Lighter secondary text on dark surfaces (light-mode greys are darkened for contrast). */
+html.dark .text-gray-400, html.dark .hover\:text-gray-400:hover { color: #9ca3af; }
+html.dark .text-gray-500 { color: #a3aab8; }
+html.dark .text-primary { color: #5cc4cb; }
+html.dark .text-danger { color: #f0a3d2; }
+html.dark .text-success { color: #8fcf6a; }
+html.dark .text-warning { color: #f0a54a; }
+html.dark .text-gray-600 { color: #b6bcc9; }
+/* Explicit dark: variants would otherwise pick up the darkened light-mode greys. */
+html.dark .dark\:text-gray-400, html.dark .dark\:hover\:text-gray-400:hover { color: #9ca3af; }
+html.dark .dark\:text-gray-500 { color: #a3aab8; }

@@ -1,20 +1,14 @@
 'use client'
+import { SUPPORTED_CURRENCIES, setActiveCurrency } from '@/lib/currency'
 import { useEffect, useState } from 'react'
-import { Card, Button, Input, Sheet } from '@/components/ui'
+import { Card, Button, ConfirmDialog, Input, Select, Sheet } from '@/components/ui'
 import { signOut } from 'next-auth/react'
-import { User, Lock, Globe, Trash2, Database, AlertTriangle, Download, Upload } from 'lucide-react'
+import { User, Lock, Trash2, Database, AlertTriangle, Download, Upload } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface UserProfile { id: string; name: string; email: string; currency: string; cashBuffer: number }
 
-const CURRENCIES = [
-  { value: 'INR', label: '₹ Indian Rupee' },
-  { value: 'USD', label: '$ US Dollar' },
-  { value: 'EUR', label: '€ Euro' },
-  { value: 'GBP', label: '£ British Pound' },
-  { value: 'AED', label: 'د.إ UAE Dirham' },
-  { value: 'SGD', label: 'S$ Singapore Dollar' },
-]
+const CURRENCIES = SUPPORTED_CURRENCIES
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -26,6 +20,7 @@ export default function SettingsPage() {
   const [pwMsg, setPwMsg] = useState('')
   const [restoring, setRestoring] = useState(false)
   const [restoreMsg, setRestoreMsg] = useState('')
+  const [pendingRestore, setPendingRestore] = useState<{ data: unknown; preview: { version: string; counts: Record<string, number>; warnings: string[]; notes: string[]; replaces: Record<string, number> } } | null>(null)
   const [showClearModal, setShowClearModal] = useState(false)
   const [confirmText, setConfirmText] = useState('')
   const [clearing, setClearing] = useState(false)
@@ -41,8 +36,13 @@ export default function SettingsPage() {
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setMsg('')
-    await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, email: form.email, currency: form.currency, cashBuffer: Number(form.cashBuffer || 0) }) })
-    setMsg('Profile saved!'); setLoading(false)
+    try {
+      const response = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, email: form.email, currency: form.currency, cashBuffer: Number(form.cashBuffer || 0) }) })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Unable to save profile')
+      setActiveCurrency(data.currency)
+      setMsg('Profile saved!')
+    } catch (cause) { setMsg(cause instanceof Error ? cause.message : 'Unable to save profile') } finally { setLoading(false) }
   }
 
   async function changePassword(e: React.FormEvent) {
@@ -54,38 +54,41 @@ export default function SettingsPage() {
     setPwMsg(res.ok ? 'Password changed!' : data.error || 'Error'); setPwLoading(false)
   }
 
+  // Step 1: validate the file and show what it contains. Nothing changes until the user confirms.
   async function handleRestore(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
-    setRestoreMsg('')
-    
-    if (!confirm('Restoring this backup will replace your current Spendwise data. Do you want to continue?')) {
-      e.target.value = ''
-      return
-    }
-
-    setRestoring(true)
+    setRestoreMsg(''); setRestoring(true)
     try {
       const text = await file.text()
-      const data = JSON.parse(text)
-      const res = await fetch('/api/restore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
+      let data: unknown
+      try { data = JSON.parse(text) } catch { throw new Error('The file is not valid JSON, or it was cut off before the end') }
+      const res = await fetch('/api/restore?preview=1', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
       const result = await res.json()
-      if (res.ok) {
-        setRestoreMsg('Backup restored successfully!')
-        load()
-      } else {
-        setRestoreMsg(result.error || 'Restore failed')
-      }
-    } catch (err: any) {
-      setRestoreMsg('Invalid backup file format')
-    } finally {
-      setRestoring(false)
-      e.target.value = ''
-    }
+      if (!res.ok) throw new Error([result.error, ...(result.details ?? [])].filter(Boolean).join(' · ') || 'Restore failed')
+      setPendingRestore({ data, preview: result })
+    } catch (err) {
+      setRestoreMsg(err instanceof Error ? err.message : 'Invalid backup file format')
+    } finally { setRestoring(false) }
+  }
+
+  // Step 2: replace the data atomically and report exactly what was imported.
+  async function confirmRestore() {
+    if (!pendingRestore) return
+    setRestoring(true); setRestoreMsg('')
+    try {
+      const res = await fetch('/api/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pendingRestore.data) })
+      const result = await res.json()
+      if (!res.ok) throw new Error([result.error, ...(result.details ?? [])].filter(Boolean).join(' · ') || 'Restore failed')
+      const r = result.restored
+      setRestoreMsg(`Backup restored successfully: ${r.accounts} accounts, ${r.creditCards} cards, ${r.debts} loans/debts (${r.debtPayments} payments), ${r.paymentPlans} recurring payments, ${r.incomeSources} income sources.${result.notes?.length ? ` ${result.notes.join(' ')}` : ''}`)
+      setPendingRestore(null)
+      await load()
+    } catch (err) {
+      setRestoreMsg(err instanceof Error ? err.message : 'Restore failed')
+      setPendingRestore(null)
+    } finally { setRestoring(false) }
   }
 
   async function handleClearData() {
@@ -122,13 +125,9 @@ export default function SettingsPage() {
         <form onSubmit={saveProfile} className="space-y-3">
           <Input label="Name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           <Input label="Email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-          <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1"><Globe size={12} className="inline mr-1" />Currency</label>
-            <select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}
-              className="w-full px-3 py-2.5 rounded-xl border border-border dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30">
-              {CURRENCIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-          </div>
+          <Select label="Currency" value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}>
+            {CURRENCIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </Select>
           <Input id="cash-buffer" label="Safety buffer" type="number" min="0" step="0.01" value={form.cashBuffer} onChange={e => setForm(f => ({ ...f, cashBuffer: e.target.value }))} />
           <p className="text-xs text-gray-500">The payment plan keeps this amount aside before showing money as safe to spend.</p>
           {msg && <p className="text-xs text-success">{msg}</p>}
@@ -311,6 +310,18 @@ export default function SettingsPage() {
           </div>
         </div>
       </Sheet>
+      <ConfirmDialog
+        open={Boolean(pendingRestore)} title="Replace your data with this backup?" confirmLabel="Replace my data" destructive loading={restoring}
+        onCancel={() => setPendingRestore(null)} onConfirm={confirmRestore}
+        message={pendingRestore && <div className="space-y-3">
+          <p>Backup version {pendingRestore.preview.version}. Restoring replaces everything currently in your account.</p>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-xl bg-surface-offset p-3 text-xs dark:bg-gray-800">
+            {([['accounts', 'Accounts'], ['creditCards', 'Cards'], ['debts', 'Loans & debts'], ['debtPayments', 'Loan payments'], ['paymentPlans', 'Recurring payments'], ['incomeSources', 'Income sources'], ['ledgerEntries', 'Ledger entries']] as const).map(([key, label]) => <div key={key} className="flex justify-between gap-2"><dt>{label}</dt><dd className="font-semibold tabular-nums">{pendingRestore.preview.counts[key] ?? 0}</dd></div>)}
+          </dl>
+          {pendingRestore.preview.warnings.map(warning => <p key={warning} className="text-xs text-warning">{warning}</p>)}
+          {pendingRestore.preview.notes.map(note => <p key={note} className="text-xs text-gray-500">{note}</p>)}
+        </div>}
+      />
     </div>
   )
 }

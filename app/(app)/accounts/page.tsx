@@ -1,310 +1,43 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { formatCurrency } from '@/lib/currency'
-import { Card, Button, Sheet, Input, Select, Badge, DatePicker, ProgressBar } from '@/components/ui'
-import { ChevronDown, Edit2, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
-import { CardPaymentForm } from '@/components/CardPaymentForm'
-import { ReconcileForm, ReconcileTarget } from '@/components/ReconcileForm'
-import { InstitutionLogo } from '@/components/InstitutionLogo'
-import { INSTITUTIONS, InstitutionId, inferInstitution } from '@/lib/institutions'
-import { cn } from '@/lib/utils'
-import BillsPage from '@/app/(app)/bills/page'
-import DebtsPage from '@/app/(app)/debts/page'
+import { Suspense } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { BankAccountsPanel } from '@/components/accounts/BankAccountsPanel'
+import { CardsPanel } from '@/components/accounts/CardsPanel'
+import { LoansPanel } from '@/components/accounts/LoansPanel'
+import { RecurringPaymentsPanel } from '@/components/accounts/RecurringPaymentsPanel'
+import { LoadingState, PageContainer, SectionTabs } from '@/components/ui'
 
-interface Account { id: string; name: string; type: string; balance: number; color: string; institution: InstitutionId }
-interface CreditCard { id: string; name: string; bank: string; institution: InstitutionId; totalLimit: number; usedLimit: number; dueAmount: number; minimumDue: number; expectedDue: number | null; billDueDate: string | null; dueDate: number; statementDate: number; color: string; type: 'CARD' | 'PAYLATER' }
+const SECTIONS = [
+  { id: 'banks', label: 'Bank accounts' },
+  { id: 'cards', label: 'Cards & pay later' },
+  { id: 'recurring', label: 'Recurring' },
+  { id: 'loans', label: 'Loans & debts' },
+] as const
+type SectionId = typeof SECTIONS[number]['id']
 
-const COLORS = ['#01696f', '#006494', '#5f259f', '#dc2626', '#d97706', '#16a34a']
-const CARD_COLORS = ['#1a1a2e', '#003087', '#8b0000', '#1b4332', '#1e3a5f', '#2d1b69']
-
-function AccountForm({ onSuccess, initial }: { onSuccess: () => void; initial?: Account }) {
-  const [name, setName] = useState(initial?.name ?? '')
-  const [type, setType] = useState(initial?.type ?? 'BANK')
-  const [balance, setBalance] = useState(String(initial?.balance ?? ''))
-  const [color, setColor] = useState(initial?.color ?? COLORS[0])
-  const [institution, setInstitution] = useState<InstitutionId>(initial?.institution ?? inferInstitution(initial?.name))
-  const [loading, setLoading] = useState(false)
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    const url = initial ? `/api/accounts/${initial.id}` : '/api/accounts'
-    const method = initial ? 'PATCH' : 'POST'
-    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, type, balance: parseFloat(balance) || 0, color, institution }) })
-    setLoading(false); onSuccess()
-  }
-
-  return (
-    <form onSubmit={submit} className="space-y-4 pb-4">
-      <Input label="Account Name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. HDFC Savings" required />
-      <Select label="Type" value={type} onChange={e => setType(e.target.value)}>
-        <option value="BANK">Bank Account</option>
-        <option value="WALLET">Wallet</option>
-        <option value="CASH">Cash</option>
-      </Select>
-      <Select id="account-institution" label="Bank / provider" value={institution} onChange={e => setInstitution(e.target.value as InstitutionId)}>
-        {Object.entries(INSTITUTIONS).filter(([, item]) => item.account).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}
-      </Select>
-      {!initial && <Input label="Opening Balance" type="number" value={balance} onChange={e => setBalance(e.target.value)} placeholder="0" />}
-      <div>
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">Color</label>
-        <div className="flex gap-2">
-          {COLORS.map(c => (
-            <button key={c} type="button" onClick={() => setColor(c)}
-              className={cn('w-8 h-8 rounded-full transition-all', color === c ? 'ring-2 ring-offset-2 ring-gray-400' : '')}
-              style={{ backgroundColor: c }} />
-          ))}
-        </div>
-      </div>
-      <Button type="submit" size="lg" loading={loading}>{initial ? 'Update Account' : 'Add Account'}</Button>
-    </form>
-  )
+const panels: Record<SectionId, () => React.ReactElement> = {
+  banks: () => <BankAccountsPanel />,
+  cards: () => <CardsPanel />,
+  recurring: () => <RecurringPaymentsPanel />,
+  loans: () => <LoansPanel />,
 }
 
-function CreditCardForm({ onSuccess, initial }: { onSuccess: () => void; initial?: CreditCard }) {
-  const [form, setForm] = useState({
-    name: initial?.name ?? '', bank: initial?.bank ?? '', institution: initial?.institution ?? inferInstitution(initial?.bank, 'card'),
-    totalLimit: String(initial?.totalLimit ?? ''), usedLimit: String(initial?.usedLimit ?? ''),
-    dueAmount: String(initial?.dueAmount ?? ''), minimumDue: String(initial?.minimumDue ?? ''),
-    expectedDue: String(initial?.expectedDue ?? ''), billDueDate: initial?.billDueDate?.slice(0, 10) ?? '',
-    dueDate: String(initial?.dueDate ?? ''),
-    statementDate: String(initial?.statementDate ?? ''), color: initial?.color ?? CARD_COLORS[0],
-    type: initial?.type ?? 'CARD' as 'CARD' | 'PAYLATER',
-  })
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [showBillDetails, setShowBillDetails] = useState(Boolean(initial?.dueAmount || initial?.minimumDue || initial?.expectedDue || initial?.billDueDate))
-  const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(p => ({ ...p, [k]: e.target.value }))
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault(); setLoading(true); setError('')
-    try {
-      const url = initial ? `/api/credit-cards/${initial.id}` : '/api/credit-cards'
-      const method = initial ? 'PATCH' : 'POST'
-      const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        ...form, totalLimit: parseFloat(form.totalLimit), usedLimit: parseFloat(form.usedLimit) || 0,
-        dueAmount: parseFloat(form.dueAmount) || 0, minimumDue: parseFloat(form.minimumDue) || 0,
-        expectedDue: form.expectedDue === '' ? null : Number(form.expectedDue),
-        billDueDate: form.billDueDate || null,
-        dueDate: parseInt(form.dueDate), statementDate: parseInt(form.statementDate) || 1,
-      }) })
-      if (!response.ok) throw new Error((await response.json()).error || 'Unable to save card')
-      onSuccess()
-    } catch (error) { setError(error instanceof Error ? error.message : 'Unable to save card') }
-    finally { setLoading(false) }
-  }
-
+function AccountsSections() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const params = useSearchParams()
+  const requested = params.get('section')
+  const section: SectionId = SECTIONS.some(item => item.id === requested) ? requested as SectionId : 'banks'
+  // The selected section lives in the URL so refresh, Back and shared links keep it.
+  const select = (id: string) => router.push(`${pathname}?section=${id}`, { scroll: false })
   return (
-    <form onSubmit={submit} className="space-y-4 pb-4">
-      <Select id="card-type" label="What are you adding?" value={form.type} onChange={(e) => setForm(p => ({ ...p, type: e.target.value as any }))}>
-        <option value="CARD">Credit Card</option>
-        <option value="PAYLATER">Pay Later</option>
-      </Select>
-      <Select id="card-institution" label={form.type === 'PAYLATER' ? 'Provider' : 'Bank'} value={form.institution} onChange={(e) => setForm(p => {
-        const institution = e.target.value as InstitutionId
-        return { ...p, institution, bank: institution === 'OTHER' ? p.bank : INSTITUTIONS[institution].label }
-      })}>
-        {Object.entries(INSTITUTIONS).filter(([, item]) => item.card).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}
-      </Select>
-      <Input id="card-name" label={form.type === 'PAYLATER' ? "Account Name" : "Card Name"} value={form.name} onChange={f('name')} placeholder={form.type === 'PAYLATER' ? "e.g. Amazon Pay Later" : "e.g. HDFC Millennia"} required />
-      {form.institution === 'OTHER' && <Input id="card-bank" label="Provider name" value={form.bank} onChange={f('bank')} placeholder={form.type === 'PAYLATER' ? "e.g. Amazon" : "e.g. HDFC Bank"} required />}
-      <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2"><Input id="card-totalLimit" label="Total limit" type="number" min="0" step="0.01" value={form.totalLimit} onChange={f('totalLimit')} required /><Input id="card-usedLimit" label="Amount used" type="number" min="0" step="0.01" value={form.usedLimit} onChange={f('usedLimit')} /></div>
-      <Input id="card-dueDate" label="Payment due day" type="number" min="1" max="31" value={form.dueDate} onChange={f('dueDate')} placeholder="e.g. 15" required />
-      <p className="text-xs text-gray-500">You can update the current bill amount after your next statement arrives.</p>
-      <button type="button" onClick={() => setShowBillDetails(value => !value)} className="flex w-full items-center justify-between rounded-xl bg-surface-offset px-3 py-3 text-left text-sm font-semibold dark:bg-gray-800"><span>{showBillDetails ? 'Hide bill details' : 'Add bill details (optional)'}</span><span className="text-lg font-normal text-gray-400">{showBillDetails ? '−' : '+'}</span></button>
-      {showBillDetails && <div className="space-y-4 rounded-xl border border-border p-3 dark:border-gray-700"><Input id="card-expected-due" label="Expected bill amount" type="number" min="0" step="0.01" value={form.expectedDue} onChange={f('expectedDue')} placeholder="Automatic from amount used" /><Input id="card-dueAmount" label="Actual bill remaining" type="number" min="0" step="0.01" value={form.dueAmount} onChange={f('dueAmount')} /><Input id="card-minimumDue" label="Minimum due" type="number" min="0" step="0.01" value={form.minimumDue} onChange={f('minimumDue')} /><DatePicker label="Current bill due date" value={form.billDueDate} onChange={f('billDueDate')} /><Input id="card-statementDate" label="Statement day (optional)" type="number" min="1" max="31" value={form.statementDate} onChange={f('statementDate')} placeholder="e.g. 1" /></div>}
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <Button id="save-credit-card" type="submit" size="lg" loading={loading}>{initial ? 'Update' : 'Add'}</Button>
-    </form>
+    <PageContainer className="space-y-4">
+      <SectionTabs label="Accounts sections" tabs={SECTIONS.map(item => ({ ...item }))} active={section} onChange={select} />
+      <div role="tabpanel" id={`panel-${section}`} aria-labelledby={`tab-${section}`}>{panels[section]()}</div>
+    </PageContainer>
   )
 }
 
 export default function AccountsPage() {
-  const [payCard, setPayCard] = useState<CreditCard | null>(null)
-  const [tab, setTab] = useState<'accounts' | 'cards' | 'payments' | 'debts'>('accounts')
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [cards, setCards] = useState<CreditCard[]>([])
-  const [expanded, setExpanded] = useState<string | null>(null)
-  const [sheet, setSheet] = useState<{ type: 'account' | 'card'; edit?: Account | CreditCard } | null>(null)
-  const [reconcileTarget, setReconcileTarget] = useState<ReconcileTarget | null>(null)
-  const [mounted, setMounted] = useState(false)
-
-  async function load() {
-    const [a, c] = await Promise.all([
-      fetch('/api/accounts').then(r => r.json()),
-      fetch('/api/credit-cards').then(r => r.json()),
-    ])
-    setAccounts(a); setCards(c)
-  }
-
-  useEffect(() => {
-    load()
-    setMounted(true)
-  }, [])
-
-  async function deleteAccount(id: string) {
-    if (!confirm('Delete this account?')) return
-    await fetch(`/api/accounts/${id}`, { method: 'DELETE' }); load()
-  }
-
-  async function deleteCard(id: string) {
-    if (!confirm('Delete this card?')) return
-    await fetch(`/api/credit-cards/${id}`, { method: 'DELETE' }); load()
-  }
-
-  const totalBankBalance = accounts.reduce((total, account) => total + Number(account.balance), 0)
-  const totalCardUsed = cards.reduce((total, card) => total + Number(card.usedLimit), 0)
-  const totalCardLimit = cards.reduce((total, card) => total + Number(card.totalLimit), 0)
-  const totalCardAvailable = totalCardLimit - totalCardUsed
-  const totalCardDue = cards.reduce((total, card) => total + Number(card.dueAmount || card.expectedDue || 0), 0)
-
-  return (
-    <div className="mx-auto max-w-3xl px-3 py-3 sm:px-4 sm:py-4">
-      {/* Tab Switcher */}
-      <div className="mb-4 grid grid-cols-4 overflow-hidden rounded-xl border border-border dark:border-gray-700">
-        {(['accounts', 'cards', 'payments', 'debts'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={cn('min-w-0 truncate px-1 py-2.5 text-[10px] font-medium transition-colors min-[390px]:text-[11px] sm:text-sm',
-              tab === t ? 'bg-primary text-white' : 'text-gray-500 dark:text-gray-400')}>
-            {t === 'accounts' ? 'Bank accounts' : t === 'cards' ? 'Cards' : t === 'payments' ? 'Payments' : 'Loans & debts'}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'payments' && <BillsPage />}
-      {tab === 'debts' && <DebtsPage />}
-
-      {tab === 'accounts' && (
-        <div className="space-y-3">
-          <Card className="bg-gradient-to-br from-primary to-primary-hover p-4 text-white"><p className="text-sm text-white/75">Total across bank accounts</p><p className="mt-1 text-3xl font-bold tabular-nums">{formatCurrency(totalBankBalance)}</p><p className="mt-2 text-xs text-white/70">{accounts.length} account{accounts.length === 1 ? '' : 's'} · tap an account to adjust its balance</p></Card>
-          <Button onClick={() => setSheet({ type: 'account' })} variant="outline" className="w-full gap-2">
-            <Plus size={16} /> Add Account
-          </Button>
-          {accounts.map(acc => (
-            <Card key={acc.id} className="overflow-hidden">
-              <button className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2.5 p-3.5 text-left" onClick={() => setExpanded(expanded === acc.id ? null : acc.id)}>
-                <InstitutionLogo institution={acc.institution} size={36} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold dark:text-white min-[390px]:text-base">{acc.name}</p>
-                  <Badge className="mt-0.5 max-w-full truncate bg-surface-offset text-[11px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{INSTITUTIONS[acc.institution]?.label || acc.type}</Badge>
-                </div>
-                <p className="whitespace-nowrap text-right text-sm font-bold tabular-nums dark:text-white min-[390px]:text-base">{formatCurrency(acc.balance)}</p>
-                <ChevronDown size={15} className={cn('text-gray-400 transition-transform', expanded === acc.id && 'rotate-180')} />
-              </button>
-              {expanded === acc.id && (
-                <div className="flex flex-wrap gap-2 px-4 pb-4">
-                  <Button id={`reconcile-account-${acc.id}`} variant="outline" size="sm" onClick={() => setReconcileTarget({ id: acc.id, name: acc.name, type: 'account', currentValue: Number(acc.balance) })} className="gap-1">
-                    <SlidersHorizontal size={13} />Adjust Balance
-                  </Button>
-                  <Button id={`edit-account-${acc.id}`} variant="outline" size="sm" onClick={() => setSheet({ type: 'account', edit: acc })} className="gap-1">
-                    <Edit2 size={13} />Edit
-                  </Button>
-                  <Button id={`delete-account-${acc.id}`} variant="danger" size="sm" onClick={() => deleteAccount(acc.id)} className="gap-1">
-                    <Trash2 size={13} />Delete
-                  </Button>
-                </div>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {tab === 'cards' && (
-        <div className="space-y-3">
-          <Card className="bg-gradient-to-br from-primary to-primary-hover p-4 text-white"><p className="text-sm text-white/75">Total card balance in use</p><p className="mt-1 text-3xl font-bold tabular-nums">{formatCurrency(totalCardUsed)}</p><p className="mt-2 text-xs text-white/70">{cards.length} card{cards.length === 1 ? '' : 's'} · {formatCurrency(totalCardAvailable)} available · {formatCurrency(totalCardDue)} due</p></Card>
-          <Button onClick={() => setSheet({ type: 'card' })} variant="outline" className="w-full gap-2">
-            <Plus size={16} /> Add Card / Pay Later
-          </Button>
-          {cards.map(card => {
-            const pct = (card.usedLimit / card.totalLimit) * 100
-            const available = card.totalLimit - card.usedLimit
-            return (
-              <Card key={card.id} className="overflow-hidden">
-                <div className="p-3.5 sm:p-4">
-                  <div className="mb-3 flex items-start justify-between gap-2">
-                    <div className="flex min-w-0 gap-2.5">
-                      <InstitutionLogo institution={card.institution} size={36} />
-                      <div className="min-w-0"><div className="mb-1 flex min-w-0 items-center gap-1.5">
-                        <p className="truncate text-xs text-gray-500 dark:text-gray-400">{card.bank}</p>
-                        <Badge className="shrink-0 bg-surface-offset dark:bg-gray-800 text-[9px] text-gray-500 dark:text-gray-400 font-medium px-1.5 py-0.5 rounded">
-                          {card.type === 'PAYLATER' ? 'Pay Later' : 'Credit Card'}
-                        </Badge>
-                      </div>
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <p className="truncate font-semibold dark:text-white">{card.name}</p>
-                        {mounted && card.dueAmount > 0 && (card.billDueDate ? new Date(card.billDueDate.slice(0, 10) + 'T23:59:59') < new Date() : new Date().getDate() > card.dueDate) && (
-                          <Badge className="bg-danger/10 text-danger dark:bg-danger/20 text-[10px] font-semibold uppercase tracking-wider py-0.5 px-2">Overdue</Badge>
-                        )}
-                        {card.usedLimit > card.totalLimit && (
-                          <Badge className="bg-warning/10 text-warning dark:bg-warning/20 text-[10px] font-semibold uppercase tracking-wider py-0.5 px-2">Over Limit</Badge>
-                        )}
-                      </div></div>
-                    </div>
-                    <div className="flex shrink-0 gap-0.5">
-                      <button onClick={() => setSheet({ type: 'card', edit: card })} className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-surface-offset dark:hover:bg-gray-800">
-                        <Edit2 size={14} className="text-gray-400" />
-                      </button>
-                      <button onClick={() => deleteCard(card.id)} className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-surface-offset dark:hover:bg-gray-800">
-                        <Trash2 size={14} className="text-danger" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    <Button id={`pay-card-${card.id}`} variant="outline" size="sm" disabled={card.usedLimit <= 0} onClick={() => setPayCard(card)}>Record Payment</Button>
-                    <Button id={`reconcile-card-${card.id}`} variant="outline" size="sm" onClick={() => setReconcileTarget({ id: card.id, name: card.name, type: 'card', currentValue: Number(card.usedLimit) })} className="gap-1">
-                      <SlidersHorizontal size={13} />Adjust Usage
-                    </Button>
-                  </div>
-                  <ProgressBar value={card.usedLimit} max={card.totalLimit} className="mb-3" />
-                  <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
-                    <div>
-                      <p className="text-xs text-gray-400">Used</p>
-                      <p className="whitespace-nowrap text-sm font-semibold tabular-nums dark:text-white">{formatCurrency(card.usedLimit)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-400">Available</p>
-                      <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-success">{formatCurrency(available)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-400">Actual bill</p>
-                      <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-danger">{formatCurrency(card.dueAmount)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-400">Min Due</p>
-                      <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-danger">{formatCurrency(card.minimumDue)}</p>
-                    </div>
-                  </div>
-                  <p className="text-sm mt-3 dark:text-gray-200">Expected due: {formatCurrency(card.expectedDue ?? Math.max(0, card.usedLimit))} <span className="text-xs text-gray-400">({card.expectedDue === null ? 'from usage' : 'manual estimate'})</span></p>
-                  {card.billDueDate && <p className="text-xs text-gray-400">Current bill due: {new Date(card.billDueDate).toLocaleDateString('en-IN')}</p>}
-                  <p className="text-xs text-gray-400 mt-2 text-center">Due on {card.dueDate}th · Statement on {card.statementDate}th</p>
-                </div>
-              </Card>
-            )
-          })}
-        </div>
-      )}
-
-      <Sheet open={!!payCard} onClose={() => setPayCard(null)} title={`Pay ${payCard?.name ?? 'card'}`}>
-        {payCard && <CardPaymentForm card={payCard} accounts={accounts} onSuccess={() => { setPayCard(null); load() }} />}
-      </Sheet>
-      <Sheet open={!!reconcileTarget} onClose={() => setReconcileTarget(null)}
-        title={reconcileTarget?.type === 'account' ? `Adjust ${reconcileTarget.name} Balance` : `Adjust ${reconcileTarget?.name} Usage`}>
-        {reconcileTarget && (
-          <ReconcileForm
-            target={reconcileTarget}
-            onSuccess={() => { setReconcileTarget(null); load() }}
-            onCancel={() => setReconcileTarget(null)}
-          />
-        )}
-      </Sheet>
-      <Sheet open={!!sheet} onClose={() => setSheet(null)}
-        title={sheet?.type === 'account' ? (sheet.edit ? 'Edit Account' : 'Add Account') : (sheet?.edit ? 'Edit Card' : 'Add Credit Card')}>
-        {sheet?.type === 'account' ? (
-          <AccountForm onSuccess={() => { setSheet(null); load() }} initial={sheet.edit as Account} />
-        ) : sheet?.type === 'card' ? (
-          <CreditCardForm onSuccess={() => { setSheet(null); load() }} initial={sheet.edit as CreditCard} />
-        ) : null}
-      </Sheet>
-    </div>
-  )
+  return <Suspense fallback={<PageContainer><LoadingState /></PageContainer>}><AccountsSections /></Suspense>
 }

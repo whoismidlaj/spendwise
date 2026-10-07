@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
+import { now as currentTime } from '@/lib/clock'
 import { dateKey, monthDate, monthsInRange } from '@/lib/planning'
+import { incomeDate } from '@/lib/income'
+import { loadObligations, OVERDUE_LOOKBACK_MONTHS } from '@/lib/obligations'
 
 type FlowItem = {
   id: string
@@ -15,12 +18,16 @@ type FlowItem = {
   isEssential: boolean
   status: 'EXPECTED' | 'RECEIVED' | 'PAID' | 'OVERDUE'
   accountName?: string
+  reserves?: 'FULL' | 'MINIMUM' | 'NONE'
+  sourceType?: string
+  sourceId?: string
+  occurrenceId?: string
 }
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const now = new Date()
+  const now = currentTime()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1)
@@ -29,61 +36,41 @@ export async function GET(req: NextRequest) {
   const end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999)
   const endExclusive = new Date(start.getFullYear(), start.getMonth() + 1, 1)
   const generationStart = monthStart
+  const lookbackStart = new Date(now.getFullYear(), now.getMonth() - OVERDUE_LOOKBACK_MONTHS, 1)
   const months = monthsInRange(generationStart, end)
-  const [user, accounts, incomeSources, plans, cards, debts] = await Promise.all([
+  const [user, accounts, incomeSources] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { cashBuffer: true } }),
     prisma.account.findMany({ where: { userId: session.user.id, isActive: true }, select: { id: true, name: true, balance: true } }),
     prisma.incomeSource.findMany({ where: { userId: session.user.id, isActive: true }, include: { account: { select: { name: true } }, occurrences: true } }),
-    prisma.paymentPlan.findMany({ where: { userId: session.user.id, isActive: true }, include: { account: { select: { name: true } }, payments: true } }),
-    prisma.creditCard.findMany({ where: { userId: session.user.id, isActive: true } }),
-    prisma.debt.findMany({ where: { userId: session.user.id, isActive: true, direction: 'BORROWED' }, include: { payments: true } }),
   ])
   const items: FlowItem[] = []
+  const unconfirmedIncome: { sourceId: string; name: string; date: Date; amount: number }[] = []
   for (const income of incomeSources) {
-    if (income.frequency !== 'MONTHLY' || !income.payday) continue
+    if (income.frequency !== 'MONTHLY' || (!income.payday && income.paydayRule !== 'LAST_WORKING_DAY')) continue
     for (const { year, month } of months) {
-      const date = monthDate(year, month, income.payday)
+      const date = incomeDate(year, month, income)!
       if (date < generationStart || date > end) continue
       const occurrence = income.occurrences.find(item => dateKey(new Date(item.expectedDate)) === dateKey(date))
       if (occurrence?.status === 'SKIPPED') continue
       // The actual receipt is already in the live account balance. Only an
       // unpaid expected income belongs in the forward cash-flow projection.
       if (occurrence?.status === 'RECEIVED') continue
+      // A passed payday that nobody confirmed may already be in the bank balance, so it is not forecast.
+      if ((!occurrence || occurrence.status === 'EXPECTED') && date < todayStart) { unconfirmedIncome.push({ sourceId: income.id, name: income.name, date, amount: Number(income.expectedInHand) }); continue }
       items.push({ id: `income-${income.id}-${dateKey(date)}`, date, name: income.name, kind: 'INCOME', source: income.type, amount: Number(occurrence?.expectedAmount ?? income.expectedInHand), reservedAmount: 0, isEssential: true, status: 'EXPECTED', accountName: income.account?.name })
     }
   }
-  for (const plan of plans) {
-    for (const { year, month } of months) {
-      const date = monthDate(year, month, plan.dueDay)
-      if (date < generationStart || date > end || date < plan.startDate) continue
-      if (plan.payments.some(payment => dateKey(new Date(payment.dueDate)) === dateKey(date) && payment.paidAt)) continue
-      items.push({ id: `plan-${plan.id}-${dateKey(date)}`, date, name: plan.name, kind: 'PAYMENT', source: plan.type, amount: Number(plan.amount), reservedAmount: plan.isEssential ? Number(plan.amount) : 0, isEssential: plan.isEssential, status: date < todayStart ? 'OVERDUE' : 'EXPECTED', accountName: plan.account?.name })
-    }
-  }
-  for (const debt of debts) {
-    if (!debt.isRecurring || !debt.paymentDate || !debt.paymentAmount) {
-      if (debt.deadline && debt.deadline <= end && Number(debt.remaining) > 0) {
-        const amount = Number(debt.remaining)
-        items.push({ id: `debt-deadline-${debt.id}`, date: debt.deadline, name: debt.name, kind: 'PAYMENT', source: 'DEBT', amount, reservedAmount: amount, isEssential: true, status: debt.deadline < todayStart ? 'OVERDUE' : 'EXPECTED' })
-      }
-      continue
-    }
-    for (const { year, month } of months) {
-      const date = monthDate(year, month, debt.paymentDate)
-      if (date < generationStart || date > end || debt.payments.some(payment => new Date(payment.paidDate).getFullYear() === year && new Date(payment.paidDate).getMonth() === month)) continue
-      const amount = Math.min(Number(debt.paymentAmount), Number(debt.remaining))
-      items.push({ id: `debt-${debt.id}-${dateKey(date)}`, date, name: debt.name, kind: 'PAYMENT', source: 'DEBT', amount, reservedAmount: amount, isEssential: true, status: date < todayStart ? 'OVERDUE' : 'EXPECTED' })
-    }
-  }
-  for (const card of cards) {
-    const actualDue = Number(card.dueAmount)
-    const estimatedDue = Number(card.expectedDue ?? card.usedLimit)
-    const amount = actualDue > 0 ? actualDue : estimatedDue
-    if (amount <= 0) continue
-    const currentDueDate = monthDate(now.getFullYear(), now.getMonth(), card.dueDate)
-    const estimatedDate = currentDueDate < todayStart ? monthDate(now.getFullYear(), now.getMonth() + 1, card.dueDate) : currentDueDate
-    const date = card.billDueDate ?? (actualDue > 0 ? currentDueDate : estimatedDate)
-    if (date <= end) items.push({ id: `card-${card.id}`, date, name: `${card.bank} ${card.name}`, kind: 'PAYMENT', source: card.type === 'PAYLATER' ? 'PAY_LATER' : 'CARD', amount, reservedAmount: actualDue > 0 ? Number(card.minimumDue) || actualDue : estimatedDue, isEssential: true, status: date < todayStart ? 'OVERDUE' : 'EXPECTED' })
+  // Payments come from the shared obligation service; paid ones are already in bank balances.
+  const obligations = await loadObligations(prisma, session.user.id, { from: lookbackStart, to: end, now })
+  for (const obligation of obligations) {
+    if (obligation.status === 'PAID') continue
+    items.push({
+      id: obligation.key, date: obligation.dueDate, name: obligation.name, kind: 'PAYMENT',
+      source: obligation.sourceType === 'RECURRING' ? obligation.category : obligation.sourceType === 'CARD' ? obligation.category : 'DEBT',
+      amount: obligation.amount, reservedAmount: obligation.reservedAmount, reserves: obligation.reserves, isEssential: obligation.isRequired,
+      status: obligation.status === 'OVERDUE' ? 'OVERDUE' : 'EXPECTED', accountName: obligation.accountName,
+      sourceType: obligation.sourceType, sourceId: obligation.sourceId, occurrenceId: obligation.occurrenceId,
+    })
   }
   items.sort((a, b) => a.date.getTime() - b.date.getTime() || (a.kind === 'PAYMENT' ? -1 : 1))
   const selectedItems = period === 'next' ? items.filter(item => item.date >= start) : items
@@ -107,6 +94,6 @@ export async function GET(req: NextRequest) {
     return { ...item, projectedBalance: running }
   })
   return NextResponse.json(toJson({
-    accounts, items: timeline, summary: { bankBalance, openingBalance, expectedIncome, receivedIncome, requiredPayments, optionalPayments, cashBuffer, safeToSpend: openingBalance + expectedIncome - requiredPayments - cashBuffer, lowestProjectedBalance: lowest, shortfall: Math.max(0, cashBuffer - lowest) },
+    accounts, unconfirmedIncome, items: timeline, summary: { bankBalance, openingBalance, expectedIncome, receivedIncome, requiredPayments, optionalPayments, cashBuffer, safeToSpend: openingBalance + expectedIncome - requiredPayments - cashBuffer, lowestProjectedBalance: lowest, shortfall: Math.max(0, cashBuffer - lowest) },
   }))
 }

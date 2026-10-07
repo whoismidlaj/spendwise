@@ -1,6 +1,6 @@
 # Spendwise Android app
 
-This is the Phase 1 native Android client. It currently provides login, account/transaction read views, and manual expense creation. SMS permissions and transaction drafts are intentionally not included yet.
+This is the Phase 1 native Android client. It is a read-only companion: login, account balances and recent balance activity. Spendwise is a monthly obligation planner, so the mobile app intentionally cannot create expenses or transactions.
 
 ## Local development
 

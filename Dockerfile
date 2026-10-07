@@ -38,7 +38,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Copy package files and prisma schema
 COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma/
-COPY docker-entrypoint.sh tsconfig.seed.json ./
+COPY docker-entrypoint.sh tsconfig.seed.json prisma.config.ts ./
 RUN chmod +x docker-entrypoint.sh
 
 # Copy built application, public files, and node_modules (with generated Prisma client)

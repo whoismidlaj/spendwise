@@ -39,3 +39,13 @@ public/workbox-*.js
 public/worker-*.js
 public/sw.js.map
 public/workbox-*.js.map
+
+# e2e
+/e2e/node_modules/
+/e2e/test-results/
+/e2e/playwright-report/
+
+# personal backups
+*.backup.json
+spendwise-backup-*.json
+!tests/fixtures/*.json

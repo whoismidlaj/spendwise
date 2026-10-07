@@ -25,15 +25,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const dueDate = new Date(`${data.dueDate}T12:00:00`)
       const existing = await tx.paymentPlanOccurrence.findUnique({ where: { paymentPlanId_dueDate: { paymentPlanId: id, dueDate } } })
       if (existing?.paidAt) throw new PaymentError('This scheduled payment is already recorded')
-      const payment = existing
-        ? await tx.paymentPlanOccurrence.update({ where: { id: existing.id }, data: { amount: data.amount, paidAt: new Date(), accountId } })
-        : await tx.paymentPlanOccurrence.create({ data: { paymentPlanId: id, dueDate, amount: data.amount, paidAt: new Date(), accountId } })
       await tx.account.update({ where: { id: accountId }, data: { balance: { decrement: data.amount } } })
-      await tx.transaction.create({ data: { userId: session.user.id, accountId, type: 'EXPENSE', amount: data.amount, name: `Planned payment: ${plan.name}`, date: new Date(), managedPayment: true } })
+      const ledger = await tx.transaction.create({ data: { userId: session.user.id, accountId, type: 'EXPENSE', amount: data.amount, name: `Planned payment: ${plan.name}`, date: new Date(), managedPayment: true } })
+      const payment = existing
+        ? await tx.paymentPlanOccurrence.update({ where: { id: existing.id }, data: { amount: data.amount, paidAt: new Date(), accountId, transactionId: ledger.id } })
+        : await tx.paymentPlanOccurrence.create({ data: { paymentPlanId: id, dueDate, amount: data.amount, paidAt: new Date(), accountId, transactionId: ledger.id } })
       return payment
     })
     return NextResponse.json(toJson(result))
   } catch (error) {
     return NextResponse.json({ error: error instanceof PaymentError ? error.message : 'Unable to record payment' }, { status: error instanceof PaymentError ? error.status : 500 })
+  }
+}
+
+// Mark an occurrence unpaid: credit the account back and remove the exact ledger entry.
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { id } = await params
+  const parsed = z.object({ dueDate: z.string().date() }).safeParse(await req.json())
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+  try {
+    await atomic(async tx => {
+      const plan = await tx.paymentPlan.findFirst({ where: { id, userId: session.user.id } })
+      if (!plan) throw new PaymentError('Payment plan not found', 404)
+      const occurrence = await tx.paymentPlanOccurrence.findUnique({ where: { paymentPlanId_dueDate: { paymentPlanId: id, dueDate: new Date(`${parsed.data.dueDate}T12:00:00`) } } })
+      if (!occurrence?.paidAt) throw new PaymentError('This scheduled payment is not recorded as paid', 404)
+      if (occurrence.accountId) await tx.account.update({ where: { id: occurrence.accountId }, data: { balance: { increment: occurrence.amount } } })
+      const ledger = occurrence.transactionId
+        ? await tx.transaction.findFirst({ where: { id: occurrence.transactionId, userId: session.user.id } })
+        // Occurrences paid before ledger links existed fall back to the old name/amount match.
+        : await tx.transaction.findFirst({ where: { userId: session.user.id, managedPayment: true, accountId: occurrence.accountId, amount: occurrence.amount, name: `Planned payment: ${plan.name}` }, orderBy: { createdAt: 'desc' } })
+      if (ledger) await tx.transaction.delete({ where: { id: ledger.id } })
+      await tx.paymentPlanOccurrence.delete({ where: { id: occurrence.id } })
+    })
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof PaymentError ? error.message : 'Unable to undo payment' }, { status: error instanceof PaymentError ? error.status : 500 })
   }
 }

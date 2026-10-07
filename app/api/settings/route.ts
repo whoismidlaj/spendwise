@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { isSupportedCurrency } from '@/lib/currency'
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -29,7 +30,10 @@ export async function PATCH(req: NextRequest) {
   const updateData: Record<string, unknown> = {}
   if (name !== undefined) updateData.name = name
   if (email !== undefined) updateData.email = email
-  if (currency !== undefined) updateData.currency = currency
+  if (currency !== undefined) {
+    if (!isSupportedCurrency(currency)) return NextResponse.json({ error: 'Unsupported currency' }, { status: 400 })
+    updateData.currency = currency
+  }
   if (cashBuffer !== undefined) {
     if (typeof cashBuffer !== 'number' || !Number.isFinite(cashBuffer) || cashBuffer < 0) return NextResponse.json({ error: 'Cash buffer must be a positive amount' }, { status: 400 })
     updateData.cashBuffer = cashBuffer

@@ -2,25 +2,30 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma, toJson } from '@/lib/prisma'
+import { debtFields, normalizeSchedule, scheduleError } from '@/lib/debt-schema'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
 const debtUpdateSchema = z.object({
-  direction: z.enum(['BORROWED', 'LENT']).optional(),
-  name: z.string().min(1).optional(),
-  type: z.enum(['PERSONAL', 'LOAN', 'CREDIT_LINE', 'PAY_LATER']).optional(),
-  amount: z.number().finite().multipleOf(0.01).positive().optional(),
-  remaining: z.number().finite().multipleOf(0.01).nonnegative().optional(),
-  interestRate: z.number().finite().multipleOf(0.01).nonnegative().optional(),
-  isRecurring: z.boolean().optional(),
-  paymentDate: z.number().int().min(1).max(31).nullable().optional(),
-  paymentAmount: z.number().finite().multipleOf(0.01).positive().nullable().optional(),
-  totalInstallments: z.number().int().positive().nullable().optional(),
-  startDate: z.string().date().nullable().optional(),
-  deadline: z.string().date().nullable().optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
-  description: z.string().nullable().optional(),
-  isActive: z.boolean().optional(),
-})
+  direction: debtFields.direction,
+  name: debtFields.name,
+  type: debtFields.type,
+  amount: debtFields.amount,
+  remaining: z.number().finite().multipleOf(0.01).nonnegative(),
+  interestRate: debtFields.interestRate,
+  isRecurring: debtFields.isRecurring,
+  paymentDate: debtFields.paymentDate,
+  paymentAmount: debtFields.paymentAmount,
+  totalInstallments: debtFields.totalInstallments,
+  startDate: debtFields.startDate,
+  totalRepaymentAmount: debtFields.totalRepaymentAmount,
+  totalInterestAmount: debtFields.totalInterestAmount,
+  installmentSchedule: debtFields.installmentSchedule,
+  deadline: debtFields.deadline,
+  priority: debtFields.priority,
+  description: debtFields.description,
+  isActive: z.boolean(),
+}).partial()
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -45,7 +50,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const payments = await prisma.debtPayment.count({ where: { debtId: id } })
       if (payments > 0) return NextResponse.json({ error: 'Direction cannot change after recording repayments' }, { status: 400 })
     }
+    const invalidSchedule = scheduleError(parsed.data.installmentSchedule)
+    if (invalidSchedule) return NextResponse.json({ error: invalidSchedule }, { status: 400 })
     const updateData: any = { ...parsed.data }
+    if (parsed.data.installmentSchedule) {
+      // Paid installments keep their stored numbers, so a schedule edit must not renumber rows.
+      const paidNumbers = await prisma.debtPayment.count({ where: { debtId: id, installmentNumber: { not: null } } })
+      if (paidNumbers > 0 && parsed.data.installmentSchedule.length < paidNumbers) return NextResponse.json({ error: 'The schedule cannot be shorter than the installments already paid' }, { status: 400 })
+      updateData.installmentSchedule = normalizeSchedule(parsed.data.installmentSchedule)
+    } else if (parsed.data.installmentSchedule === null) updateData.installmentSchedule = Prisma.DbNull
     if (parsed.data.deadline !== undefined) {
       updateData.deadline = parsed.data.deadline ? new Date(parsed.data.deadline) : null
     }

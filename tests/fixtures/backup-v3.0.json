@@ -1,0 +1,146 @@
+{
+  "format": "spendwise-backup",
+  "version": "3.0",
+  "schema": "monthly-planning",
+  "createdAt": "2026-10-07T12:07:49.330Z",
+  "settings": {
+    "currency": "INR",
+    "cashBuffer": 0
+  },
+  "accounts": [
+    {
+      "id": "cmuy1lbdj0001pf57029sbf4k",
+      "name": "Account 1",
+      "type": "BANK",
+      "balance": 700,
+      "color": "#dc2626",
+      "institution": "HDFC_BANK",
+      "isActive": true,
+      "createdAt": "2026-10-07T11:46:44.311Z"
+    },
+    {
+      "id": "cmuy1lzt00003pf57sk23pl4o",
+      "name": "Account 2",
+      "type": "BANK",
+      "balance": 3100,
+      "color": "#d97706",
+      "institution": "JUPITER",
+      "isActive": true,
+      "createdAt": "2026-10-07T11:47:15.972Z"
+    },
+    {
+      "id": "cmuy1mhev0005pf57ozjf66q2",
+      "name": "Account 3",
+      "type": "BANK",
+      "balance": 8400,
+      "color": "#006494",
+      "institution": "CANARA_BANK",
+      "isActive": true,
+      "createdAt": "2026-10-07T11:47:38.791Z"
+    },
+    {
+      "id": "cmuy1mzsi0007pf5739ng1ymf",
+      "name": "Account 4",
+      "type": "BANK",
+      "balance": 1000,
+      "color": "#01696f",
+      "institution": "FEDERAL_BANK",
+      "isActive": true,
+      "createdAt": "2026-10-07T11:48:02.610Z"
+    }
+  ],
+  "creditCards": [
+    {
+      "id": "cmuy1r07z000bpf57fe3nvral",
+      "name": "Card 1",
+      "bank": "Test bank",
+      "institution": "SBI_CARD",
+      "totalLimit": 20000,
+      "usedLimit": 1500,
+      "dueAmount": 0,
+      "expectedDue": null,
+      "billDueDate": null,
+      "minimumDue": 0,
+      "dueDate": 13,
+      "statementDate": 23,
+      "color": "#1a1a2e",
+      "type": "CARD",
+      "isActive": true,
+      "reminderDays": 3,
+      "createdAt": "2026-10-07T11:51:09.781Z"
+    },
+    {
+      "id": "cmuy1nts80009pf57o641dwx1",
+      "name": "Card 2",
+      "bank": "Test bank",
+      "institution": "JUPITER_CSB_CARD",
+      "totalLimit": 20000,
+      "usedLimit": 100,
+      "dueAmount": 0,
+      "expectedDue": null,
+      "billDueDate": null,
+      "minimumDue": 0,
+      "dueDate": 11,
+      "statementDate": 23,
+      "color": "#1a1a2e",
+      "type": "CARD",
+      "isActive": true,
+      "reminderDays": 3,
+      "createdAt": "2026-10-07T11:48:41.480Z"
+    },
+    {
+      "id": "cmuy21oo1000dpf57gfso4qho",
+      "name": "Card 3",
+      "bank": "Test bank",
+      "institution": "HDFC_CARD",
+      "totalLimit": 30000,
+      "usedLimit": 10800,
+      "dueAmount": 0,
+      "expectedDue": null,
+      "billDueDate": null,
+      "minimumDue": 0,
+      "dueDate": 2,
+      "statementDate": 13,
+      "color": "#1a1a2e",
+      "type": "CARD",
+      "isActive": true,
+      "reminderDays": 3,
+      "createdAt": "2026-10-07T11:59:28.023Z"
+    }
+  ],
+  "debts": [],
+  "incomeSources": [],
+  "paymentPlans": [
+    {
+      "id": "cmuy239fa000fpf573jluk1gz",
+      "accountId": null,
+      "name": "Payment 1",
+      "type": "FAMILY",
+      "amount": 5000,
+      "dueDay": 5,
+      "isEssential": true,
+      "isActive": true,
+      "startDate": "2026-10-07T12:00:41.589Z",
+      "notes": null,
+      "createdAt": "2026-10-07T12:00:41.590Z",
+      "updatedAt": "2026-10-07T12:00:41.590Z",
+      "payments": []
+    },
+    {
+      "id": "cmuy23n3b000hpf57iype192q",
+      "accountId": null,
+      "name": "Payment 2",
+      "type": "OTHER",
+      "amount": 15000,
+      "dueDay": 2,
+      "isEssential": true,
+      "isActive": true,
+      "startDate": "2026-10-07T12:00:59.302Z",
+      "notes": null,
+      "createdAt": "2026-10-07T12:00:59.303Z",
+      "updatedAt": "2026-10-07T12:00:59.303Z",
+      "payments": []
+    }
+  ],
+  "paymentLedger": []
+}

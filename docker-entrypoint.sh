@@ -36,8 +36,12 @@ echo "Running Prisma migrations..."
 # Run migrations using the generated prisma client
 npx prisma migrate deploy
 
-echo "Seeding database..."
-npx prisma db seed
+if [ "${SEED_DATABASE:-false}" = "true" ]; then
+  echo "Seeding database..."
+  npx prisma db seed
+else
+  echo "Skipping database seed (set SEED_DATABASE=true to seed explicitly)."
+fi
 
 echo "Starting application..."
 # Execute the container's main process (CMD)

@@ -3,8 +3,9 @@ import Link from 'next/link'
 import { useSession, signOut } from 'next-auth/react'
 import { Settings, Moon, Sun, LogOut, Menu, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
+import { drawerNavigation } from './navigation'
 
 interface TopBarProps {
   title: string
@@ -20,6 +21,16 @@ export function TopBar({ title }: TopBarProps) {
     setMounted(true)
   }, [])
 
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const closeButton = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!menuOpen) return
+    closeButton.current?.focus()
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { setMenuOpen(false); menuButton.current?.focus() } }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [menuOpen])
+
   const initials = session?.user?.name
     ? session.user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
     : session?.user?.email?.[0].toUpperCase() ?? 'U'
@@ -30,8 +41,9 @@ export function TopBar({ title }: TopBarProps) {
       <div className="flex h-14 items-center justify-between px-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-2.5">
           <button
+            ref={menuButton}
             onClick={() => setMenuOpen(true)}
-            className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-surface-offset dark:hover:bg-gray-800 active:scale-95 transition-all"
+            className="w-11 h-11 flex items-center justify-center rounded-xl text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-surface-offset dark:hover:bg-gray-800 active:scale-95 transition-all"
             aria-label="Open navigation menu"
           >
             <Menu size={20} />
@@ -49,7 +61,7 @@ export function TopBar({ title }: TopBarProps) {
       </div>
 
       {/* Slide-in left drawer */}
-      <div className={cn("fixed inset-0 z-[150] transition-all duration-300", menuOpen ? "visible" : "invisible")}>
+      <div className={cn("fixed inset-0 z-[150] transition-all duration-300", menuOpen ? "visible" : "invisible")} aria-hidden={!menuOpen}>
         {/* Backdrop */}
         <div
           className={cn(
@@ -61,6 +73,9 @@ export function TopBar({ title }: TopBarProps) {
         
         {/* Drawer Panel */}
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation menu"
           className={cn(
             "absolute left-0 top-0 bottom-0 w-[min(20rem,calc(100vw-2rem))] bg-white dark:bg-gray-900 shadow-2xl flex flex-col transition-transform duration-300 ease-out transform overflow-y-auto",
             menuOpen ? "translate-x-0" : "-translate-x-full"
@@ -68,6 +83,7 @@ export function TopBar({ title }: TopBarProps) {
         >
           <div className="p-6 bg-gradient-to-br from-primary/10 to-primary/5 dark:from-primary/20 dark:to-transparent border-b border-border dark:border-gray-800 flex flex-col items-center text-center relative pt-8">
             <button
+              ref={closeButton}
               onClick={() => setMenuOpen(false)}
               className="absolute top-4 right-4 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white p-1 hover:bg-surface-offset dark:hover:bg-gray-850 rounded-lg transition-colors"
               aria-label="Close navigation menu"
@@ -89,21 +105,15 @@ export function TopBar({ title }: TopBarProps) {
             <div className="px-4 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
               Navigation
             </div>
-            {[
-              { href: '/dashboard', label: 'Money Plan', icon: '📊' },
-              { href: '/bills', label: 'Recurring Payments', icon: '🗓️' },
-              { href: '/accounts', label: 'Accounts & Cards', icon: '💳' },
-              { href: '/income', label: 'Income & Salary', icon: '💵' },
-              { href: '/settings', label: 'App Settings', icon: '⚙️' },
-            ].map((item) => (
+            {drawerNavigation.map(({ href, label, icon: Icon }) => (
               <Link
-                key={item.href}
-                href={item.href}
+                key={href}
+                href={href}
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-surface-offset dark:hover:bg-gray-800 transition-colors"
+                className="flex min-h-[44px] items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-surface-offset dark:hover:bg-gray-800 transition-colors"
               >
-                <span className="text-lg">{item.icon}</span>
-                {item.label}
+                <Icon size={19} aria-hidden />
+                {label}
               </Link>
             ))}
           </div>

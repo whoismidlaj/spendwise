@@ -11,7 +11,10 @@ export async function atomic<T>(work: (tx: Prisma.TransactionClient) => Promise<
     try {
       return await prisma.$transaction(work, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 3) continue
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 8) {
+        await new Promise(resolve => setTimeout(resolve, 20 * (attempt + 1) + Math.random() * 30))
+        continue
+      }
       throw error
     }
   }

@@ -24,6 +24,8 @@ const config: Config = {
           offset: '#f3f0ec',
         },
         border: 'rgba(40,37,29,0.12)',
+        // Secondary text must stay readable (4.5:1) on the warm page background; dark mode restores the lighter greys in globals.css.
+        gray: { 400: '#5f6673', 500: '#4f5766' },
       },
       borderRadius: {
         '2xl': '1rem',
