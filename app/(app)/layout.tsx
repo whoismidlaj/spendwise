@@ -1,14 +1,14 @@
 'use client'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { Banknote, History, LayoutDashboard, WalletCards } from 'lucide-react'
+import { Banknote, CalendarClock, LayoutDashboard, WalletCards } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { cn } from '@/lib/utils'
 
 const tabs = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Plan' },
-  { href: '/accounts', icon: WalletCards, label: 'Accounts' },
-  { href: '/transactions', icon: History, label: 'History' },
+  { href: '/bills', icon: CalendarClock, label: 'Payments' },
+  { href: '/debts', icon: WalletCards, label: 'Loans' },
   { href: '/income', icon: Banknote, label: 'Income' },
 ]
 
@@ -17,7 +17,6 @@ const pageTitles: Record<string, string> = {
   '/income': 'Income',
   '/bills': 'Recurring Payments',
   '/accounts': 'Accounts',
-  '/transactions': 'Transaction History',
   '/debts': 'Loans & Lending',
   '/settings': 'Settings',
 }
