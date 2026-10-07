@@ -5,7 +5,6 @@ import { CalendarDays, CheckCircle2, Landmark, Pencil, Plus, Trash2 } from 'luci
 import { Badge, Button, Card, DatePicker, Input, ProgressBar, Select, Sheet } from '@/components/ui'
 import { formatCurrency } from '@/lib/currency'
 import { buildLoanSchedule } from '@/lib/loan-schedule'
-import { cn } from '@/lib/utils'
 
 type Account = { id: string; name: string }
 type DebtPayment = { id: string; amount: number; paidDate: string; accountId?: string }
@@ -88,13 +87,10 @@ function DebtFields({ form, setForm, editing }: { form: DebtFormState; setForm: 
     setForm(current => ({ ...current, [key]: value }))
   }
   return <>
-    <Select label="This money is" value={form.direction} onChange={set('direction')} disabled={editing}>
-      <option value="BORROWED">Money I owe</option><option value="LENT">Money I lent to someone</option>
-    </Select>
     <Select label="Type" value={form.type} onChange={set('type')}>
       {Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
     </Select>
-    <Input label={form.direction === 'LENT' ? 'Person or purpose' : 'Loan or lender name'} value={form.name} onChange={set('name')} required />
+    <Input label="Loan or lender name" value={form.name} onChange={set('name')} required />
     <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
       <Input label="Original amount" type="number" min="0.01" step="0.01" value={form.amount} onChange={set('amount')} required />
       {editing ? <Input label="Remaining" type="number" min="0" step="0.01" value={form.remaining} onChange={set('remaining')} required /> : <Input label="Interest % yearly" type="number" min="0" step="0.01" value={form.interestRate} onChange={set('interestRate')} />}
@@ -113,7 +109,6 @@ function DebtFields({ form, setForm, editing }: { form: DebtFormState; setForm: 
 export default function DebtsPage() {
   const [debts, setDebts] = useState<Debt[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
-  const [filter, setFilter] = useState<'ALL' | Debt['direction']>('ALL')
   const [form, setForm] = useState<DebtFormState>(emptyForm)
   const [editing, setEditing] = useState<Debt | null>(null)
   const [paying, setPaying] = useState<Debt | null>(null)
@@ -135,13 +130,12 @@ export default function DebtsPage() {
   useEffect(() => { load() }, [])
 
   const active = debts.filter(debt => debt.isActive && Number(debt.remaining) > 0)
-  const visible = active.filter(debt => filter === 'ALL' || debt.direction === filter)
-  const iOwe = active.filter(debt => debt.direction === 'BORROWED').reduce((sum, debt) => sum + Number(debt.remaining), 0)
-  const owedToMe = active.filter(debt => debt.direction === 'LENT').reduce((sum, debt) => sum + Number(debt.remaining), 0)
-  const monthly = active.filter(debt => debt.direction === 'BORROWED' && debt.isRecurring).reduce((sum, debt) => sum + Number(debt.paymentAmount || 0), 0)
+  const visible = active.filter(debt => debt.direction === 'BORROWED')
+  const iOwe = visible.reduce((sum, debt) => sum + Number(debt.remaining), 0)
+  const monthly = visible.filter(debt => debt.isRecurring).reduce((sum, debt) => sum + Number(debt.paymentAmount || 0), 0)
 
   const payload = (state: DebtFormState, includeRemaining: boolean) => ({
-    name: state.name, direction: state.direction, type: state.type,
+    name: state.name, direction: 'BORROWED', type: state.type,
     amount: Number(state.amount), ...(includeRemaining && { remaining: Number(state.remaining) }),
     interestRate: Number(state.interestRate || 0), isRecurring: state.isRecurring,
     paymentDate: state.isRecurring && state.paymentDate ? Number(state.paymentDate) : null,
@@ -189,13 +183,10 @@ export default function DebtsPage() {
 
   return <div className="mx-auto max-w-3xl space-y-3 px-3 py-3 sm:space-y-4 sm:px-4 sm:py-4">
     <Card className="bg-gradient-to-br from-primary to-primary-hover p-4 text-white sm:p-5">
-      <p className="text-sm text-white/75">Total I owe</p><p className="mt-1 whitespace-nowrap text-3xl font-bold">{formatCurrency(iOwe)}</p>
-      <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/15 pt-3 text-center"><div className="min-w-0"><p className="truncate text-[10px] text-white/70">Monthly installments</p><p className="truncate text-sm font-bold min-[390px]:text-base">{formatCurrency(monthly)}</p></div><div className="min-w-0"><p className="truncate text-[10px] text-white/70">Owed to me</p><p className="truncate text-sm font-bold min-[390px]:text-base">{formatCurrency(owedToMe)}</p></div></div>
+      <p className="text-sm text-white/75">Total I owe</p><p className="mt-1 whitespace-nowrap text-3xl font-bold tabular-nums">{formatCurrency(iOwe)}</p>
+      <p className="mt-2 text-xs text-white/70">{visible.length} active loan{visible.length === 1 ? '' : 's'} · {formatCurrency(monthly)} in monthly repayments</p>
     </Card>
     <Button onClick={() => { setError(''); setForm(emptyForm()); setAddOpen(true) }} className="w-full gap-2"><Plus size={16} /> Add loan, debt, or lending</Button>
-    <div className="grid grid-cols-3 gap-2">
-      {([['ALL', 'All'], ['BORROWED', 'I owe'], ['LENT', 'Owed to me']] as const).map(([value, label]) => <button key={value} onClick={() => setFilter(value)} className={cn('rounded-xl px-3 py-2 text-xs font-semibold', filter === value ? 'bg-primary text-white' : 'bg-surface-offset text-gray-600 dark:bg-gray-800 dark:text-gray-300')}>{label}</button>)}
-    </div>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     {loading && debts.length === 0 ? <p className="py-8 text-center text-sm text-gray-500">Loading loans…</p> : visible.length === 0 ? <Card className="p-8 text-center text-gray-500"><Landmark className="mx-auto mb-2" /><p>No records here yet.</p></Card> : <div className="space-y-3">
       {visible.map(debt => {
@@ -203,18 +194,18 @@ export default function DebtsPage() {
         const payments = [...debt.payments].sort((a, b) => new Date(b.paidDate).getTime() - new Date(a.paidDate).getTime())
         const canShowSchedule = debt.type === 'LOAN' && debt.isRecurring && debt.paymentAmount && debt.totalInstallments && debt.startDate
         return <Card key={debt.id} className="p-3.5 sm:p-4">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5"><div className="min-w-0"><div className="flex min-w-0 items-center gap-1.5"><p className="truncate font-semibold">{debt.name}</p><Badge className={cn('shrink-0 text-[10px]', debt.direction === 'LENT' ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary')}>{debt.direction === 'LENT' ? 'Owed to me' : typeLabels[debt.type]}</Badge></div><p className="mt-1 truncate text-[11px] text-gray-500 sm:text-xs">{debt.isRecurring && debt.paymentAmount ? `${formatCurrency(debt.paymentAmount)} monthly${debt.paymentDate ? ` · day ${debt.paymentDate}` : ''}` : debt.deadline ? `Target ${new Date(debt.deadline).toLocaleDateString('en-IN')}` : 'No repayment date set'}</p></div><div className="shrink-0 whitespace-nowrap text-right"><p className="text-sm font-bold min-[390px]:text-base">{formatCurrency(debt.remaining)}</p><p className="text-[10px] text-gray-500">remaining</p></div></div>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5"><div className="min-w-0"><div className="flex min-w-0 items-center gap-1.5"><p className="truncate font-semibold">{debt.name}</p><Badge className="shrink-0 bg-primary/10 text-[10px] text-primary">{typeLabels[debt.type]}</Badge></div><p className="mt-1 truncate text-[11px] text-gray-500 sm:text-xs">{debt.isRecurring && debt.paymentAmount ? `${formatCurrency(debt.paymentAmount)} monthly${debt.paymentDate ? ` · day ${debt.paymentDate}` : ''}` : debt.deadline ? `Target ${new Date(debt.deadline).toLocaleDateString('en-IN')}` : 'No repayment date set'}</p></div><div className="shrink-0 whitespace-nowrap text-right"><p className="text-sm font-bold min-[390px]:text-base">{formatCurrency(debt.remaining)}</p><p className="text-[10px] text-gray-500">remaining</p></div></div>
           <div className="mt-3"><ProgressBar value={progress} max={100} /><div className="mt-1 flex justify-between text-[10px] text-gray-500"><span>{Math.round(progress)}% complete</span><span>{payments.length} payments recorded</span></div></div>
           {debt.description && <p className="mt-2 text-xs text-gray-500">{debt.description}</p>}
           {canShowSchedule && <Button size="sm" variant="outline" onClick={() => setSchedule(debt)} className="mt-3 gap-1"><CalendarDays size={13} /> Installment breakdown</Button>}
           {payments.length > 0 && <details className="mt-3 rounded-xl bg-surface-offset px-3 py-2 text-xs dark:bg-gray-800"><summary className="cursor-pointer font-semibold">Payment history</summary><div className="mt-2 divide-y divide-border dark:divide-gray-700">{payments.map(payment => <div key={payment.id} className="flex justify-between py-2"><span>{new Date(payment.paidDate).toLocaleDateString('en-IN')}</span><span className="font-semibold">{formatCurrency(payment.amount)}</span></div>)}</div></details>}
-          <div className="mt-3 flex justify-end gap-2 border-t border-border pt-3 dark:border-gray-800"><Button size="sm" variant="outline" onClick={() => edit(debt)}><Pencil size={13} /></Button><Button size="sm" variant="outline" onClick={() => remove(debt)} className="text-danger"><Trash2 size={13} /></Button><Button size="sm" onClick={() => { setError(''); setPaying(debt); setAmount(String(Math.min(Number(debt.paymentAmount || debt.remaining), Number(debt.remaining)))); setPaidDate(new Date().toISOString().slice(0, 10)); setAccountId('') }} className="gap-1"><CheckCircle2 size={13} /> {debt.direction === 'LENT' ? 'Receive' : 'Pay'}</Button></div>
+          <div className="mt-3 flex justify-end gap-2 border-t border-border pt-3 dark:border-gray-800"><Button size="sm" variant="outline" onClick={() => edit(debt)}><Pencil size={13} /></Button><Button size="sm" variant="outline" onClick={() => remove(debt)} className="text-danger"><Trash2 size={13} /></Button><Button size="sm" onClick={() => { setError(''); setPaying(debt); setAmount(String(Math.min(Number(debt.paymentAmount || debt.remaining), Number(debt.remaining)))); setPaidDate(new Date().toISOString().slice(0, 10)); setAccountId('') }} className="gap-1"><CheckCircle2 size={13} /> Pay</Button></div>
         </Card>
       })}
     </div>}
 
     <Sheet open={addOpen || Boolean(editing)} onClose={() => { setAddOpen(false); setEditing(null) }} title={editing ? 'Edit loan or debt' : 'Add loan, debt, or lending'}><form onSubmit={save} className="space-y-4 pb-5"><DebtFields form={form} setForm={setForm} editing={Boolean(editing)} />{error && <p role="alert" className="text-sm text-danger">{error}</p>}<Button type="submit" loading={loading}>{editing ? 'Save changes' : 'Add record'}</Button></form></Sheet>
-    <Sheet open={Boolean(paying)} onClose={() => setPaying(null)} title={paying?.direction === 'LENT' ? 'Record money received' : 'Record payment'}>{paying && <form onSubmit={recordPayment} className="space-y-4 pb-5"><p className="rounded-xl bg-surface-offset p-3 text-sm dark:bg-gray-800">{paying.name} · {formatCurrency(paying.remaining)} remaining</p><Input label={paying.direction === 'LENT' ? 'Amount received' : 'Amount paid'} type="number" min="0.01" max={paying.remaining} step="0.01" value={amount} onChange={event => setAmount(event.target.value)} required /><DatePicker label="Payment date" value={paidDate} onChange={event => setPaidDate(event.target.value)} /><Select label={paying.direction === 'LENT' ? 'Credit to account' : 'Pay from account'} value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">No account balance change</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</Select>{error && <p role="alert" className="text-sm text-danger">{error}</p>}<Button type="submit" loading={loading}>Record payment</Button></form>}</Sheet>
+    <Sheet open={Boolean(paying)} onClose={() => setPaying(null)} title="Record payment">{paying && <form onSubmit={recordPayment} className="space-y-4 pb-5"><p className="rounded-xl bg-surface-offset p-3 text-sm dark:bg-gray-800">{paying.name} · {formatCurrency(paying.remaining)} remaining</p><Input label="Amount paid" type="number" min="0.01" max={paying.remaining} step="0.01" value={amount} onChange={event => setAmount(event.target.value)} required /><DatePicker label="Payment date" value={paidDate} onChange={event => setPaidDate(event.target.value)} /><Select label="Pay from account" value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">No account balance change</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</Select>{error && <p role="alert" className="text-sm text-danger">{error}</p>}<Button type="submit" loading={loading}>Record payment</Button></form>}</Sheet>
     {schedule && <LoanSchedule debt={schedule} onClose={() => setSchedule(null)} />}
   </div>
 }

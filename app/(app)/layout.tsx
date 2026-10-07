@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 const tabs = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Plan' },
   { href: '/bills', icon: CalendarClock, label: 'Payments' },
-  { href: '/debts', icon: WalletCards, label: 'Loans' },
+  { href: '/accounts', icon: WalletCards, label: 'Accounts' },
   { href: '/income', icon: Banknote, label: 'Income' },
 ]
 
@@ -16,8 +16,8 @@ const pageTitles: Record<string, string> = {
   '/dashboard': 'Money Plan',
   '/income': 'Income',
   '/bills': 'Recurring Payments',
-  '/accounts': 'Accounts',
-  '/debts': 'Loans & Lending',
+  '/accounts': 'Accounts & commitments',
+  '/debts': 'Accounts & commitments',
   '/settings': 'Settings',
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { CalendarClock, CheckCircle2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Badge, Button, Card, Input, Select, Sheet } from '@/components/ui'
 import { formatCurrency } from '@/lib/currency'
 
@@ -66,9 +66,12 @@ export default function BillsPage() {
 
   const monthlyTotal = bills.reduce((sum, bill) => sum + Number(bill.amount), 0)
   const requiredTotal = bills.filter(bill => bill.isEssential).reduce((sum, bill) => sum + Number(bill.amount), 0)
+  const today = new Date().getDate()
+  const upcoming = [...bills].filter(bill => bill.dueDay >= today).sort((a, b) => a.dueDay - b.dueDay)
 
   return <div className="mx-auto max-w-3xl space-y-3 px-3 py-3 sm:space-y-4 sm:px-4 sm:py-4">
-    <Card className="bg-gradient-to-br from-primary to-primary-hover p-4 text-white sm:p-5"><p className="text-sm text-white/75">Monthly recurring payments</p><p className="mt-1 whitespace-nowrap text-3xl font-bold">{formatCurrency(monthlyTotal)}</p><div className="mt-3 truncate border-t border-white/15 pt-3 text-xs text-white/75">{formatCurrency(requiredTotal)} required · {bills.length} active payments</div></Card>
+    <Card className="bg-gradient-to-br from-primary to-primary-hover p-4 text-white sm:p-5"><p className="text-sm text-white/75">Payments this month</p><p className="mt-1 whitespace-nowrap text-3xl font-bold">{formatCurrency(monthlyTotal)}</p><div className="mt-3 truncate border-t border-white/15 pt-3 text-xs text-white/75">{upcoming.length} upcoming · {formatCurrency(requiredTotal)} required</div></Card>
+    {upcoming.length > 0 && <section className="space-y-2"><div className="flex items-center gap-2 px-1"><CalendarClock size={16} className="text-primary" /><div><h2 className="text-sm font-semibold">Upcoming this month</h2><p className="text-xs text-gray-500">Your next recurring payments</p></div></div><Card className="divide-y divide-border overflow-hidden dark:divide-gray-800">{upcoming.slice(0, 5).map(bill => <div key={bill.id} className="flex items-center gap-3 px-3.5 py-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">{bill.dueDay}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{bill.name}</p><p className="text-[11px] text-gray-500">Due {bill.dueDay === today ? 'today' : `on day ${bill.dueDay}`}</p></div><p className="whitespace-nowrap text-sm font-bold">{formatCurrency(bill.amount)}</p></div>)}</Card></section>}
     <Button onClick={() => { setError(''); setEditing(null); setForm(emptyForm()); setFormOpen(true) }} className="w-full gap-2"><Plus size={16} /> Add recurring payment</Button>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     {bills.length === 0 ? <Card className="p-8 text-center text-sm text-gray-500">No recurring bills yet.</Card> : <div className="space-y-3">{bills.map(bill => <Card key={bill.id} className="p-3.5 sm:p-4"><div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5"><div className="min-w-0"><div className="flex min-w-0 items-center gap-1.5"><p className="truncate font-semibold">{bill.name}</p><Badge className="shrink-0 bg-primary/10 text-[10px] text-primary">{labels[bill.type] || bill.type}</Badge>{!bill.isEssential && <Badge className="shrink-0 bg-gray-100 text-[10px] text-gray-500 dark:bg-gray-800">Optional</Badge>}</div><p className="mt-1 truncate text-[11px] text-gray-500 sm:text-xs">Day {bill.dueDay}{bill.account ? ` · ${bill.account.name}` : ' · choose account when paying'}</p>{bill.notes && <p className="mt-2 truncate text-xs text-gray-500">{bill.notes}</p>}</div><p className="whitespace-nowrap text-sm font-bold min-[390px]:text-base">{formatCurrency(bill.amount)}</p></div><div className="mt-3 flex justify-end gap-2 border-t border-border pt-3 dark:border-gray-800"><Button size="sm" variant="outline" onClick={() => edit(bill)} className="shrink-0"><Pencil size={13} /></Button><Button size="sm" variant="outline" onClick={() => remove(bill)} className="shrink-0 text-danger"><Trash2 size={13} /></Button><Button size="sm" onClick={() => { setError(''); setPaying(bill); setPaidAmount(String(bill.amount)); setPaymentAccountId(bill.account?.id || '') }} className="shrink-0 gap-1"><CheckCircle2 size={13} /> Paid</Button></div></Card>)}</div>}
