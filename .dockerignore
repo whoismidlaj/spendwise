@@ -17,3 +17,6 @@ pnpm-debug.log*
 .gemini
 README.md
 SETUP.md
+e2e
+docs
+tests
